@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import stat
 from datetime import date

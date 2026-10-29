@@ -1,4 +1,5 @@
 """Cliente HTTP da API Banking do Inter: mTLS, cache de token, saldo e extrato."""
+from __future__ import annotations
 import json
 import os
 import time

@@ -1,4 +1,5 @@
 """CLI: python -m inter_integra {init,credenciais,status}"""
+from __future__ import annotations
 import getpass
 import sys
 

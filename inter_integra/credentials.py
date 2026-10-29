@@ -1,4 +1,5 @@
 """Client ID / Client Secret no Keychain do macOS (via keyring). Nunca em arquivo."""
+from __future__ import annotations
 import keyring
 
 from .config import Settings

@@ -1,4 +1,5 @@
 """Caminhos e configuração. Tudo fica em ~/PagamentosInter/ (ou INTER_HOME)."""
+from __future__ import annotations
 import os
 import stat
 from dataclasses import dataclass
