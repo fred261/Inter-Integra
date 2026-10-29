@@ -147,3 +147,10 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Inter Integra: nunca versionar segredos nem dados
+*.db
+*.sqlite3
+*.crt
+*.key
+*.pem

@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+httpx
+keyring
+jinja2
+python-multipart
+pytest
