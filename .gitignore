@@ -154,3 +154,6 @@ vite.config.ts.timestamp-*
 *.crt
 *.key
 *.pem
+
+__pycache__/
+*.pyc
