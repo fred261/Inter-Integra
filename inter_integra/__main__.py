@@ -3,6 +3,7 @@ import getpass
 import sys
 
 from . import credentials, db
+from .client import InterClient, InterError, parse_data
 from .config import check_cert_permissions, ensure_home, load_settings
 
 
@@ -48,14 +49,41 @@ def cmd_status(s) -> int:
     return 0 if ok else 1
 
 
-COMANDOS = {"init": cmd_init, "credenciais": cmd_credenciais, "status": cmd_status}
+def _cliente(s) -> InterClient:
+    return InterClient(s, *credentials.carregar(s))
+
+
+def cmd_saldo(s, args) -> int:
+    j = _cliente(s).saldo(parse_data(args[0]) if args else None)
+    print(j)
+    return 0
+
+
+def cmd_extrato(s, args) -> int:
+    if len(args) != 2:
+        print("Uso: extrato AAAA-MM-DD AAAA-MM-DD")
+        return 2
+    print(_cliente(s).extrato(parse_data(args[0]), parse_data(args[1])))
+    return 0
+
+
+COMANDOS = {"init": cmd_init, "credenciais": cmd_credenciais, "status": cmd_status,
+            "saldo": cmd_saldo, "extrato": cmd_extrato}
+_COM_ARGS = {"saldo", "extrato"}
 
 
 def main(argv: list[str]) -> int:
-    if len(argv) != 2 or argv[1] not in COMANDOS:
+    if len(argv) < 2 or argv[1] not in COMANDOS or (len(argv) > 2 and argv[1] not in _COM_ARGS):
         print(f"Uso: python -m inter_integra {{{','.join(COMANDOS)}}}")
         return 2
-    return COMANDOS[argv[1]](load_settings())
+    s = load_settings()
+    try:
+        if argv[1] in _COM_ARGS:
+            return COMANDOS[argv[1]](s, argv[2:])
+        return COMANDOS[argv[1]](s)
+    except (InterError, credentials.CredenciaisAusentes, ValueError) as e:
+        print(f"Erro: {e}")
+        return 1
 
 
 if __name__ == "__main__":
