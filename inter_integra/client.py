@@ -11,6 +11,8 @@ from . import db
 from .config import Settings
 
 ESCOPOS_PADRAO = "extrato.read"
+ESCOPO_PIX_WRITE = "pagamento-pix.write"
+ESCOPO_PIX_READ = "pagamento-pix.read"
 MARGEM_TOKEN_S = 120  # renova antes de expirar; o endpoint de token limita a 5/min
 MAX_DIAS_EXTRATO = 90
 
@@ -75,12 +77,14 @@ class InterClient:
                          (endpoint, status, resumo[:200]))
         conn.close()
 
-    def get(self, caminho: str, params: dict | None = None, escopos: str = ESCOPOS_PADRAO):
+    def _chamar(self, metodo: str, caminho: str, escopos: str, params: dict | None = None,
+                json_body: dict | None = None, headers: dict | None = None):
         for tentativa in (1, 2):
             h = {"Authorization": f"Bearer {self.token(escopos, forcar=tentativa == 2)}"}
             if self.conta:
                 h["x-conta-corrente"] = self.conta
-            r = self.http.get(caminho, params=params, headers=h)
+            h.update(headers or {})
+            r = self.http.request(metodo, caminho, params=params, json=json_body, headers=h)
             self._log(caminho, r.status_code, "" if r.is_success else _resumo(r))
             if r.status_code == 401 and tentativa == 1:
                 continue  # token pode ter sido revogado: renova uma vez
@@ -89,9 +93,20 @@ class InterClient:
             raise InterError(r.status_code, _resumo(r))
         return r.json()
 
+    def get(self, caminho: str, params: dict | None = None, escopos: str = ESCOPOS_PADRAO):
+        return self._chamar("GET", caminho, escopos, params=params)
+
     # --- endpoints ---------------------------------------------------
     def saldo(self, data: date | None = None) -> dict:
         return self.get("/banking/v2/saldo", {"dataSaldo": data.isoformat()} if data else None)
+
+    def incluir_pix(self, payload: dict, id_idempotente: str) -> dict:
+        """POST /banking/v2/pix. O mesmo id_idempotente nunca duplica o pagamento."""
+        return self._chamar("POST", "/banking/v2/pix", ESCOPO_PIX_WRITE, json_body=payload,
+                            headers={"x-id-idempotente": id_idempotente})
+
+    def consultar_pix(self, codigo_solicitacao: str) -> dict:
+        return self.get(f"/banking/v2/pix/{codigo_solicitacao}", escopos=ESCOPO_PIX_READ)
 
     def extrato(self, inicio: date, fim: date) -> dict:
         _validar_periodo(inicio, fim)

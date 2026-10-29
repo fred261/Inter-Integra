@@ -3,7 +3,7 @@ from __future__ import annotations
 import getpass
 import sys
 
-from . import credentials, db
+from . import credentials, db, pagamentos
 from .client import InterClient, InterError, parse_data
 from .config import check_cert_permissions, ensure_home, load_settings
 
@@ -68,9 +68,77 @@ def cmd_extrato(s, args) -> int:
     return 0
 
 
+def _abrir(s):
+    if not s.db_path.exists():
+        raise ValueError("banco ausente: rode `init`")
+    return db.connect(s.db_path)
+
+
+def _confirmar(resumo: str) -> bool:
+    print(resumo)
+    return input("Digite ENVIAR para confirmar: ").strip() == "ENVIAR"
+
+
+def cmd_beneficiario_add(s, args) -> int:
+    if len(args) < 2:
+        print("Uso: beneficiario-add NOME CHAVE_PIX [colaborador|faxina|outro]")
+        return 2
+    conn = _abrir(s)
+    bid = pagamentos.add_beneficiario(conn, args[0], args[1], *(args[2:3]))
+    print(f"Beneficiário {bid} cadastrado.")
+    return 0
+
+
+def cmd_pix_chave(s, args) -> int:
+    if len(args) < 2:
+        print("Uso: pix-chave ID_BENEFICIARIO VALOR [AAAA-MM-DD] [DESCRICAO]")
+        return 2
+    conn = _abrir(s)
+    valor = pagamentos.parse_valor(args[1])
+    data = args[2] if len(args) > 2 else None
+    desc = args[3] if len(args) > 3 else None
+    pid = pagamentos.criar_pix_chave(conn, int(args[0]), valor, data, desc)  # valida beneficiário
+    ben = conn.execute("SELECT nome, chave_pix FROM beneficiarios WHERE id = ?",
+                       (int(args[0]),)).fetchone()
+    resumo = (f"Pix de R$ {valor / 100:.2f} para {ben['nome']} (chave {ben['chave_pix']})"
+              f" em {data or 'hoje'}")
+    return _enviar(s, conn, pid, resumo)
+
+
+def cmd_pix_caju(s, args) -> int:
+    if len(args) != 1:
+        print("Uso: pix-caju VALOR   (o código Copia e Cola é pedido em seguida)")
+        return 2
+    conn = _abrir(s)
+    valor = pagamentos.parse_valor(args[0])
+    codigo = input("Cole o código Copia e Cola: ")
+    pid = pagamentos.criar_pix_copia_e_cola(conn, codigo, valor, "Recarga benefícios Caju")
+    return _enviar(s, conn, pid, f"Pix Copia e Cola (Caju) de R$ {valor / 100:.2f}")
+
+
+def _enviar(s, conn, pid: int, resumo: str) -> int:
+    if not _confirmar(resumo):
+        print(f"Cancelado. O pagamento {pid} ficou como rascunho, nada foi enviado.")
+        return 1
+    p = pagamentos.enviar(conn, _cliente(s), pid, confirmado=True)
+    if p["status"] == "erro":
+        print(f"Erro do Inter: {p['erro']}")
+        return 1
+    print(f"Enviado. Status: {p['status']}. Aprove no app do Inter.")
+    return 0
+
+
+def cmd_atualizar(s, args) -> int:
+    n = pagamentos.atualizar_status(_abrir(s), _cliente(s))
+    print(f"{n} pagamento(s) consultado(s).")
+    return 0
+
+
 COMANDOS = {"init": cmd_init, "credenciais": cmd_credenciais, "status": cmd_status,
-            "saldo": cmd_saldo, "extrato": cmd_extrato}
-_COM_ARGS = {"saldo", "extrato"}
+            "saldo": cmd_saldo, "extrato": cmd_extrato,
+            "beneficiario-add": cmd_beneficiario_add, "pix-chave": cmd_pix_chave,
+            "pix-caju": cmd_pix_caju, "atualizar": cmd_atualizar}
+_COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status"}
 
 
 def main(argv: list[str]) -> int:
@@ -82,7 +150,8 @@ def main(argv: list[str]) -> int:
         if argv[1] in _COM_ARGS:
             return COMANDOS[argv[1]](s, argv[2:])
         return COMANDOS[argv[1]](s)
-    except (InterError, credentials.CredenciaisAusentes, ValueError) as e:
+    except (InterError, credentials.CredenciaisAusentes, ValueError,
+            pagamentos.PagamentoInvalido) as e:
         print(f"Erro: {e}")
         return 1
 
