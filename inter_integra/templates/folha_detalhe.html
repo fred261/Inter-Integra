@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block titulo %}Folha {{ f.competencia }}{% endblock %}
+{% block conteudo %}
+{% set pendentes = ps | selectattr("status", "in", enviaveis) | list %}
+<header class="topo"><div><h1>Folha {{ f.competencia }}</h1><p class="sub">Pagamento em {{ f.data }} · {{ ps | length }} beneficiário(s)</p></div>
+  <span class="selo selo-neutro grande">{{ f.status }}</span></header>
+{% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+
+<section class="painel">
+  <div class="tabela-wrap"><table>
+    <thead><tr><th>Colaborador</th><th>Chave Pix</th><th class="num">Valor</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for p in ps %}{% set rot, cor = status_label(p.status) %}
+      <tr><td>{{ p.nome }}</td><td class="mudo">{{ p.chave_pix }}</td><td class="num">{{ p.valor_centavos | brl }}</td>
+          <td><span class="selo selo-{{ cor }}">{{ rot }}</span>{% if p.erro %}<small class="aviso-txt"> {{ p.erro }}</small>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+    <tfoot><tr><td colspan="2">Total da folha</td><td class="num"><strong>{{ f.total_centavos | brl }}</strong></td><td></td></tr></tfoot>
+  </table></div>
+
+  {% if pendentes %}
+  <form method="post" action="/folha/{{ f.id }}/enviar" class="confirma">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>Para enviar {{ pendentes | length }} pagamento(s), digite o total da folha: <strong>{{ f.total_centavos | num }}</strong>
+      <input name="total" inputmode="decimal" autocomplete="off" placeholder="0,00" required></label>
+    <p class="dica">Os envios saem 1 por segundo. Depois, aprove um a um no app do Inter conferindo cada destinatário.</p>
+    <div class="acoes"><button class="btn">Enviar folha para aprovação</button>
+    {% if ps | rejectattr("status", "eq", "rascunho") | list | length == 0 %}<button class="btn btn-sec" formaction="/folha/{{ f.id }}/descartar" formnovalidate>Descartar folha</button>{% endif %}</div>
+  </form>
+  {% else %}
+  <div class="alerta alerta-info">Tudo enviado. Aprove no app do Inter e use <strong>Atualizar status</strong> no painel.</div>
+  {% endif %}
+</section>
+{% endblock %}

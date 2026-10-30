@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block titulo %}Pagamento {{ p.id }}{% endblock %}
+{% block conteudo %}
+{% set rot, cor = status_label(p.status) %}
+<header class="topo"><div><h1>Pagamento #{{ p.id }}</h1><p class="sub">Confira todos os dados antes de enviar.</p></div>
+  <span class="selo selo-{{ cor }} grande">{{ rot }}</span></header>
+{% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+{% if p.erro and p.status == 'erro' and not erro %}<div class="alerta alerta-erro">{{ p.erro }}</div>{% endif %}
+
+<section class="painel estreito">
+  <dl class="dados">
+    <dt>Destino</dt><dd>{% if p.pix_copia_e_cola %}Pix Copia e Cola<br><code class="quebra">{{ p.pix_copia_e_cola[:60] }}…{{ p.pix_copia_e_cola[-10:] }}</code>
+      {% else %}<strong>{{ p.nome }}</strong><br><code>{{ p.chave_pix }}</code>{% endif %}</dd>
+    <dt>Valor</dt><dd class="valor-grande">{{ p.valor_centavos | brl }}</dd>
+    <dt>Data do pagamento</dt><dd>{{ p.data_pagamento or "hoje" }}</dd>
+    {% if p.descricao %}<dt>Descrição</dt><dd>{{ p.descricao }}</dd>{% endif %}
+    {% if p.codigo_solicitacao %}<dt>Código no Inter</dt><dd><code>{{ p.codigo_solicitacao }}</code></dd>{% endif %}
+  </dl>
+
+  {% if p.status in enviaveis %}
+  <form method="post" action="/pagamento/{{ p.id }}/enviar" class="confirma">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>Para enviar ao Inter, digite <strong>ENVIAR</strong><input name="confirmacao" autocomplete="off" required></label>
+    <div class="acoes"><button class="btn">Enviar para aprovação</button>
+    {% if p.status == 'rascunho' and not p.folha_id %}<button class="btn btn-sec" formaction="/pagamento/{{ p.id }}/descartar" formnovalidate>Descartar</button>{% endif %}</div>
+  </form>
+  {% elif p.status == 'aguardando_aprovacao' %}
+  <div class="alerta alerta-info"><strong>Próximo passo:</strong> abra o app do Inter, vá em aprovações e <u>confira o destinatário e o valor</u> antes de aprovar.</div>
+  {% endif %}
+</section>
+{% endblock %}

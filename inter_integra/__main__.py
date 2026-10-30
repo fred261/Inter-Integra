@@ -134,11 +134,23 @@ def cmd_atualizar(s, args) -> int:
     return 0
 
 
+def cmd_web(s) -> int:
+    import uvicorn
+
+    from .web import create_app
+    if not s.db_path.exists():
+        print("banco ausente: rode `init`")
+        return 1
+    print("Interface em http://localhost:8000 (somente neste computador). Ctrl+C para sair.")
+    uvicorn.run(create_app(s), host="127.0.0.1", port=8000, log_level="warning")
+    return 0
+
+
 COMANDOS = {"init": cmd_init, "credenciais": cmd_credenciais, "status": cmd_status,
             "saldo": cmd_saldo, "extrato": cmd_extrato,
             "beneficiario-add": cmd_beneficiario_add, "pix-chave": cmd_pix_chave,
-            "pix-caju": cmd_pix_caju, "atualizar": cmd_atualizar}
-_COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status"}
+            "pix-caju": cmd_pix_caju, "atualizar": cmd_atualizar, "web": cmd_web}
+_COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status", "web"}
 
 
 def main(argv: list[str]) -> int:

@@ -58,11 +58,34 @@ def add_beneficiario(conn, nome: str, chave_pix: str, tipo: str = "colaborador",
                      cpf: str | None = None, valor_padrao_centavos: int = 0) -> int:
     if not nome.strip() or not chave_pix.strip():
         raise PagamentoInvalido("nome e chave Pix são obrigatórios")
+    if tipo not in TIPOS:
+        raise PagamentoInvalido("tipo inválido")
     with conn:
         cur = conn.execute(
             "INSERT INTO beneficiarios (nome, cpf, chave_pix, tipo, valor_padrao_centavos) "
             "VALUES (?, ?, ?, ?, ?)", (nome.strip(), cpf, chave_pix.strip(), tipo, valor_padrao_centavos))
     return cur.lastrowid
+
+
+TIPOS = ("colaborador", "faxina", "outro")
+
+
+def update_beneficiario(conn, bid: int, nome: str, chave_pix: str, tipo: str,
+                        cpf: str | None, valor_padrao_centavos: int, ativo: bool) -> None:
+    if not nome.strip() or not chave_pix.strip():
+        raise PagamentoInvalido("nome e chave Pix são obrigatórios")
+    if tipo not in TIPOS:
+        raise PagamentoInvalido("tipo inválido")
+    if valor_padrao_centavos < 0:
+        raise PagamentoInvalido("valor padrão não pode ser negativo")
+    with conn:
+        cur = conn.execute(
+            "UPDATE beneficiarios SET nome=?, chave_pix=?, tipo=?, cpf=?, valor_padrao_centavos=?, "
+            "ativo=? WHERE id=?",
+            (nome.strip(), chave_pix.strip(), tipo, cpf or None, valor_padrao_centavos,
+             int(ativo), bid))
+    if cur.rowcount == 0:
+        raise PagamentoInvalido("beneficiário inexistente")
 
 
 # --- criação (rascunho) ----------------------------------------------
@@ -218,3 +241,14 @@ def enviar_folha(conn, client: InterClient, folha_id: int, total_confirmado_cent
         conn.execute("UPDATE folhas SET status = ? WHERE id = ?",
                      ("parcial" if ruins else "enviada", folha_id))
     return {"enviados": len(ids) - ruins, "pendentes_de_reenvio": ruins}
+
+
+def descartar_folha(conn, folha_id: int) -> None:
+    """Apaga uma folha que ainda não enviou nada."""
+    n = conn.execute("SELECT count(*) FROM pagamentos WHERE folha_id = ? AND status != 'rascunho'",
+                     (folha_id,)).fetchone()[0]
+    if n:
+        raise PagamentoInvalido("folha já tem pagamentos enviados; não pode ser descartada")
+    with conn:
+        conn.execute("DELETE FROM pagamentos WHERE folha_id = ?", (folha_id,))
+        conn.execute("DELETE FROM folhas WHERE id = ?", (folha_id,))

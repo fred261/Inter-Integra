@@ -1,0 +1,19 @@
+{% macro tabela(lista, vazio) %}
+{% if lista %}
+<div class="tabela-wrap"><table>
+  <thead><tr><th>#</th><th>Destino</th><th class="num">Valor</th><th>Data</th><th>Status</th></tr></thead>
+  <tbody>
+  {% for p in lista %}
+    {% set rot, cor = status_label(p.status) %}
+    <tr>
+      <td><a href="/pagamento/{{ p.id }}">{{ p.id }}</a></td>
+      <td>{{ p.nome or "Pix Copia e Cola" }}{% if p.descricao %}<small class="mudo"> · {{ p.descricao }}</small>{% endif %}</td>
+      <td class="num">{{ p.valor_centavos | brl }}</td>
+      <td>{{ p.data_pagamento or p.criado_em[:10] }}</td>
+      <td><span class="selo selo-{{ cor }}">{{ rot }}</span></td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% else %}<p class="vazio">{{ vazio }}</p>{% endif %}
+{% endmacro %}

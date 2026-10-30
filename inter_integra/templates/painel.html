@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_tabela_pagamentos.html" import tabela %}
+{% block titulo %}Painel{% endblock %}
+{% block conteudo %}
+<header class="topo">
+  <div><h1>Painel</h1><p class="sub">Visão geral da conta e dos pagamentos em andamento.</p></div>
+  <form method="post" action="/atualizar"><input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <button class="btn btn-sec">Atualizar status</button></form>
+</header>
+
+<section class="cartoes">
+  <div class="cartao destaque">
+    <span class="rotulo">Saldo disponível</span>
+    {% if saldo_centavos is not none %}<strong class="valor">{{ saldo_centavos | brl }}</strong>
+    {% else %}<strong class="valor mudo">—</strong><small class="aviso-txt">{{ erro_saldo }}</small>{% endif %}
+  </div>
+  <div class="cartao"><span class="rotulo">Aguardando aprovação / processando</span><strong class="valor">{{ pendentes | length }}</strong></div>
+</section>
+
+<section class="painel">
+  <h2>Pendentes</h2>
+  {{ tabela(pendentes, "Nenhum pagamento aguardando aprovação.") }}
+</section>
+
+<section class="painel">
+  <h2>Últimos processados</h2>
+  {{ tabela(ultimos, "Nenhum pagamento enviado ainda.") }}
+</section>
+{% endblock %}

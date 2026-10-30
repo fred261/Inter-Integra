@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block titulo %}Beneficiários{% endblock %}
+{% block conteudo %}
+<header class="topo"><div><h1>Beneficiários</h1><p class="sub">Quem recebe: colaboradores, faxina e outros. Confira sempre a chave Pix.</p></div></header>
+{% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+
+<section class="painel">
+  <h2>Novo beneficiário</h2>
+  <form method="post" action="/beneficiarios" class="linha-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>Nome<input name="nome" required></label>
+    <label>Chave Pix<input name="chave_pix" required></label>
+    <label>CPF <small>(opcional)</small><input name="cpf" inputmode="numeric"></label>
+    <label>Tipo<select name="tipo">{% for t in tipos %}<option>{{ t }}</option>{% endfor %}</select></label>
+    <label>Valor padrão<input name="valor" value="0,00" inputmode="decimal"></label>
+    <button class="btn">Cadastrar</button>
+  </form>
+</section>
+
+<section class="painel">
+  <h2>Cadastrados</h2>
+  {% for b in itens %}
+  <details class="item {{ '' if b.ativo else 'inativo' }}">
+    <summary>
+      <span class="nome">{{ b.nome }}</span>
+      <span class="mudo">{{ b.chave_pix }}</span>
+      <span class="selo selo-neutro">{{ b.tipo }}</span>
+      <span class="num">{{ b.valor_padrao_centavos | brl }}</span>
+      {% if not b.ativo %}<span class="selo selo-erro">inativo</span>{% endif %}
+    </summary>
+    <div class="dois">
+      <form method="post" action="/beneficiarios/{{ b.id }}" class="linha-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <label>Nome<input name="nome" value="{{ b.nome }}" required></label>
+        <label>Chave Pix<input name="chave_pix" value="{{ b.chave_pix }}" required></label>
+        <label>CPF<input name="cpf" value="{{ b.cpf or '' }}"></label>
+        <label>Tipo<select name="tipo">{% for t in tipos %}<option {{ 'selected' if t == b.tipo }}>{{ t }}</option>{% endfor %}</select></label>
+        <label>Valor padrão<input name="valor" value="{{ b.valor_padrao_centavos | num }}"></label>
+        <label class="check"><input type="checkbox" name="ativo" value="1" {{ 'checked' if b.ativo }}> Ativo</label>
+        <button class="btn btn-sec">Salvar</button>
+      </form>
+      {% if b.ativo %}
+      <form method="post" action="/pix/conferir" class="linha-form pix">
+        <input type="hidden" name="csrf_token" value="{{ csrf }}">
+        <input type="hidden" name="beneficiario_id" value="{{ b.id }}">
+        <strong>Pix avulso</strong>
+        <label>Valor<input name="valor" value="{{ b.valor_padrao_centavos | num }}" required></label>
+        <label>Data <small>(opcional)</small><input name="data" type="date"></label>
+        <label>Descrição<input name="descricao" maxlength="140"></label>
+        <button class="btn">Conferir</button>
+      </form>
+      {% endif %}
+    </div>
+  </details>
+  {% else %}<p class="vazio">Nenhum beneficiário ainda.</p>{% endfor %}
+</section>
+{% endblock %}

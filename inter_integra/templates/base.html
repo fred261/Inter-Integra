@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo %}Inter Integra{% endblock %} · Inter Integra</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+  <aside class="lateral">
+    <div class="marca"><span class="logo">II</span><div><strong>Inter Integra</strong><small>Pagamentos locais</small></div></div>
+    <nav>
+      {% set menu = [("painel","/","Painel"),("beneficiarios","/beneficiarios","Beneficiários"),("folha","/folha","Folha"),("caju","/caju","Caju"),("historico","/historico","Histórico")] %}
+      {% for chave, url, nome in menu %}
+        <a href="{{ url }}" class="{{ 'ativo' if pagina.startswith(chave) else '' }}">{{ nome }}</a>
+      {% endfor %}
+      <span class="desativado" title="Etapa 7 do plano">Boletos <em>em breve</em></span>
+    </nav>
+    <div class="rodape">
+      {% if ambiente == 'producao' %}<span class="selo selo-erro">PRODUÇÃO · dinheiro real</span>
+      {% else %}<span class="selo selo-aviso">Sandbox · dados fictícios</span>{% endif %}
+      <p>Todo pagamento exige aprovação no app do Inter.</p>
+    </div>
+  </aside>
+  <main>
+    {% block conteudo %}{% endblock %}
+  </main>
+</body>
+</html>

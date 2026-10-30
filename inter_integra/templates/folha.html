@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Folha{% endblock %}
+{% block conteudo %}
+<header class="topo"><div><h1>Folha de colaboradores</h1><p class="sub">Selecione quem recebe, ajuste os valores e confira o total na próxima tela.</p></div></header>
+{% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+
+<section class="painel">
+  {% if itens %}
+  <form method="post" action="/folha/conferir" id="form-folha">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="linha-form">
+      <label>Competência<input name="competencia" value="{{ competencia }}" pattern="\d{4}-\d{2}" required></label>
+      <label>Data do pagamento<input type="date" name="data" value="{{ data }}" required></label>
+    </div>
+    <div class="tabela-wrap"><table>
+      <thead><tr><th></th><th>Colaborador</th><th>Chave Pix</th><th class="num">Valor</th></tr></thead>
+      <tbody>
+      {% for b in itens %}
+        <tr>
+          <td><input type="checkbox" name="sel" value="{{ b.id }}" checked data-linha></td>
+          <td>{{ b.nome }}<input type="hidden" name="ids" value="{{ b.id }}"></td>
+          <td class="mudo">{{ b.chave_pix }}</td>
+          <td class="num"><input name="valor" value="{{ b.valor_padrao_centavos | num }}" inputmode="decimal" class="curto" data-valor></td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      <tfoot><tr><td colspan="3">Total selecionado</td><td class="num"><strong id="total-folha">—</strong></td></tr></tfoot>
+    </table></div>
+    <button class="btn">Conferir folha</button>
+  </form>
+  {% else %}<p class="vazio">Nenhum colaborador ativo. Cadastre em <a href="/beneficiarios">Beneficiários</a> (tipo "colaborador").</p>{% endif %}
+</section>
+
+{% if folhas %}
+<section class="painel"><h2>Folhas recentes</h2>
+  <div class="tabela-wrap"><table><thead><tr><th>#</th><th>Competência</th><th>Data</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
+  {% for f in folhas %}<tr><td><a href="/folha/{{ f.id }}">{{ f.id }}</a></td><td>{{ f.competencia }}</td><td>{{ f.data }}</td><td class="num">{{ f.total_centavos | brl }}</td><td><span class="selo selo-neutro">{{ f.status }}</span></td></tr>{% endfor %}
+  </tbody></table></div>
+</section>
+{% endif %}
+{% endblock %}
