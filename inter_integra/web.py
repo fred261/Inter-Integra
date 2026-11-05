@@ -11,14 +11,15 @@ from pathlib import Path
 from typing import Callable
 from urllib.parse import urlparse
 
+import httpx
 from keyring.errors import KeyringError
-from fastapi import Depends, FastAPI, Form, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import credentials, db, pagamentos as pg
+from . import boleto as bl, boletos as bs, credentials, db, pagamentos as pg
 from .client import InterClient, InterError
 from .config import Settings
 
@@ -29,6 +30,8 @@ STATUS_LABEL = {
     "rascunho": ("Rascunho", "neutro"), "enviando": ("Enviando", "aviso"),
     "erro": ("Erro", "erro"), "aguardando_aprovacao": ("Aguardando aprovação", "aviso"),
     "processando": ("Processando", "aviso"), "REALIZADO": ("Realizado", "ok"),
+    "PAGO": ("Pago", "ok"), "CANCELADO": ("Cancelado", "neutro"),
+    "EMPROCESSAMENTO": ("Em processamento", "aviso"),
 }
 
 
@@ -106,8 +109,8 @@ def create_app(settings: Settings,
             j = novo_cliente().saldo()
         except KeyringError:
             return None, "Keychain indisponível. Rode: python -m inter_integra credenciais"
-        except (InterError, credentials.CredenciaisAusentes, OSError) as e:
-            return None, str(e)
+        except (InterError, credentials.CredenciaisAusentes, OSError, httpx.HTTPError) as e:
+            return None, f"Sem resposta do Inter ({e.__class__.__name__})" if isinstance(e, httpx.HTTPError) else str(e)
         v = j.get("disponivel")  # campo a confirmar na resposta real do Inter
         if v is None:
             return None, "resposta do saldo sem o campo 'disponivel'"
@@ -129,8 +132,10 @@ def create_app(settings: Settings,
     @app.post("/atualizar", dependencies=[Depends(checar_csrf)])
     def atualizar(conn=Depends(get_conn)):
         try:
-            pg.atualizar_status(conn, novo_cliente())
-        except (InterError, credentials.CredenciaisAusentes):
+            cli = novo_cliente()
+            pg.atualizar_status(conn, cli)
+            bs.atualizar_status(conn, cli, sleep=time.sleep)
+        except (InterError, credentials.CredenciaisAusentes, httpx.HTTPError):
             pass  # o painel mostra o estado atual; detalhes ficam no log
         return RedirectResponse("/", status_code=303)
 
@@ -216,7 +221,7 @@ def create_app(settings: Settings,
                 pg.enviar(conn, novo_cliente(), pid, confirmado=True)
             except (pg.PagamentoInvalido, InterError, credentials.CredenciaisAusentes) as e:
                 erro = str(e)
-            except OSError as e:  # rede/timeout: fica 'enviando'; reenviar usa o mesmo id
+            except (OSError, httpx.HTTPError) as e:  # rede/timeout: fica 'enviando'; reenviar usa o mesmo id
                 erro = f"Sem resposta do Inter ({e.__class__.__name__}). Reenvie: o mesmo código é usado."
         if erro:
             return render(request, "pagamento.html", p=buscar_pagamento(conn, pid), erro=erro,
@@ -277,7 +282,7 @@ def create_app(settings: Settings,
             pg.enviar_folha(conn, novo_cliente(), fid, pg.parse_valor(total))
         except (pg.PagamentoInvalido, InterError, credentials.CredenciaisAusentes) as e:
             erro = str(e)
-        except OSError as e:
+        except (OSError, httpx.HTTPError) as e:
             erro = f"Sem resposta do Inter ({e.__class__.__name__}). Reenvie: os mesmos códigos são usados."
         if erro:
             f, ps = detalhe_folha(conn, fid)
@@ -335,5 +340,77 @@ def create_app(settings: Settings,
                 p["status"], p["codigo_solicitacao"], p["erro"])])
         return Response("﻿" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                         headers={"Content-Disposition": 'attachment; filename="historico.csv"'})
+
+    # --- boletos -------------------------------------------------------
+    def lista_boletos(conn):
+        return conn.execute("SELECT * FROM boletos ORDER BY id DESC LIMIT 20").fetchall()
+
+    @app.get("/boletos", response_class=HTMLResponse)
+    def boletos(request: Request, conn=Depends(get_conn)):
+        return render(request, "boletos.html", itens=lista_boletos(conn), erro=None)
+
+    @app.post("/boletos/conferir", dependencies=[Depends(checar_csrf)])
+    def boleto_conferir(request: Request, arquivo: UploadFile | None = File(None),
+                        codigo: str = Form(""), vencimento: str = Form(""), conn=Depends(get_conn)):
+        try:
+            venc = date.fromisoformat(vencimento) if vencimento else None
+            if arquivo is not None and arquivo.filename:
+                b = bl.parse_pdf(arquivo.file.read(bl.MAX_PDF_BYTES + 1))
+                nome = arquivo.filename
+            elif codigo.strip():
+                b, nome = bl.parse_codigo(codigo), None
+            else:
+                raise bl.BoletoInvalido("envie o PDF ou cole a linha digitável")
+            bid = bs.criar(conn, b, nome, venc)
+        except (bl.BoletoInvalido, bs.BoletoRecusado, ValueError) as e:
+            return render(request, "boletos.html", itens=lista_boletos(conn), erro=str(e))
+        return RedirectResponse(f"/boleto/{bid}", status_code=303)
+
+    def buscar_boleto(conn, bid: int):
+        r = conn.execute("SELECT * FROM boletos WHERE id = ?", (bid,)).fetchone()
+        if r is None:
+            raise HTTPException(404, "boleto não encontrado")
+        return r
+
+    def pagina_boleto(request, conn, bid, erro=None):
+        return render(request, "boleto.html", b=buscar_boleto(conn, bid), erro=erro,
+                      enviaveis=bs.ENVIAVEIS + ("enviando",))
+
+    @app.get("/boleto/{bid}", response_class=HTMLResponse)
+    def boleto(request: Request, bid: int, conn=Depends(get_conn)):
+        return pagina_boleto(request, conn, bid)
+
+    @app.post("/boleto/{bid}/enviar", dependencies=[Depends(checar_csrf)])
+    def boleto_enviar(request: Request, bid: int, confirmacao: str = Form(""), conn=Depends(get_conn)):
+        erro = None
+        if confirmacao.strip() != "ENVIAR":
+            erro = "Digite ENVIAR para confirmar."
+        else:
+            try:
+                bs.enviar(conn, novo_cliente(), bid, confirmado=True)
+            except (bs.BoletoRecusado, InterError, credentials.CredenciaisAusentes) as e:
+                erro = str(e)
+            except (OSError, httpx.HTTPError) as e:  # fica 'enviando'; o reenvio confere no Inter antes
+                erro = (f"Sem resposta do Inter ({e.__class__.__name__}). Pode reenviar: o sistema "
+                        "confere no Inter se o pagamento já existe antes de mandar de novo.")
+        if erro:
+            return pagina_boleto(request, conn, bid, erro)
+        return RedirectResponse(f"/boleto/{bid}", status_code=303)
+
+    @app.post("/boleto/{bid}/cancelar", dependencies=[Depends(checar_csrf)])
+    def boleto_cancelar(request: Request, bid: int, conn=Depends(get_conn)):
+        try:
+            bs.cancelar(conn, novo_cliente(), bid)
+        except (bs.BoletoRecusado, InterError, credentials.CredenciaisAusentes, httpx.HTTPError) as e:
+            return pagina_boleto(request, conn, bid, str(e))
+        return RedirectResponse(f"/boleto/{bid}", status_code=303)
+
+    @app.post("/boleto/{bid}/descartar", dependencies=[Depends(checar_csrf)])
+    def boleto_descartar(request: Request, bid: int, conn=Depends(get_conn)):
+        try:
+            bs.descartar(conn, bid)
+        except bs.BoletoRecusado as e:
+            return pagina_boleto(request, conn, bid, str(e))
+        return RedirectResponse("/boletos", status_code=303)
 
     return app

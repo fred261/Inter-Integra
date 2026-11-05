@@ -104,3 +104,14 @@ def test_extrato_completo_pagina(s):
 
     r = cliente(s, h).extrato_completo(date(2026, 1, 1), date(2026, 1, 31))
     assert r == [{"p": 0}, {"p": 1}]
+
+
+def test_falha_no_log_nao_derruba_a_chamada(s):
+    """Banco travado por outra conexão: a chamada à API ainda assim funciona."""
+    trava = db.connect(s.db_path)
+    trava.execute("BEGIN IMMEDIATE")
+    try:
+        assert cliente(s, handler_ok([])).saldo() == {"disponivel": 10.5}
+    finally:
+        trava.rollback()
+        trava.close()

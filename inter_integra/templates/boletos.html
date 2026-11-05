@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block titulo %}Boletos{% endblock %}
+{% block conteudo %}
+<header class="topo"><div><h1>Boletos</h1><p class="sub">Envie o PDF da conta. O sistema lê o código, confere os dígitos e agenda o pagamento no vencimento.</p></div></header>
+{% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+
+<section class="painel estreito">
+  <form method="post" action="/boletos/conferir" enctype="multipart/form-data" class="coluna-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>PDF do boleto<input type="file" name="arquivo" accept="application/pdf,.pdf"></label>
+    <p class="dica">Ou, se for foto/PDF sem texto, cole a linha digitável:</p>
+    <label>Linha digitável<input name="codigo" placeholder="00000.00000 00000.000000 ..." autocomplete="off" spellcheck="false"></label>
+    <label>Vencimento <small>(só se o sistema não conseguir ler, como em contas de consumo)</small><input type="date" name="vencimento"></label>
+    <button class="btn">Ler e conferir</button>
+  </form>
+</section>
+
+<section class="painel">
+  <h2>Recentes</h2>
+  {% if itens %}
+  <div class="tabela-wrap"><table>
+    <thead><tr><th>#</th><th>Beneficiário (PDF)</th><th class="num">Valor</th><th>Vencimento</th><th>Pagamento</th><th>Status</th></tr></thead>
+    <tbody>
+    {% for b in itens %}{% set rot, cor = status_label(b.status) %}
+      <tr><td><a href="/boleto/{{ b.id }}">{{ b.id }}</a></td><td>{{ b.beneficiario_texto or b.arquivo or "—" }}</td>
+          <td class="num">{{ b.valor_centavos | brl }}</td><td>{{ b.data_vencimento }}</td><td>{{ b.data_pagamento }}</td>
+          <td><span class="selo selo-{{ cor }}">{{ rot }}</span></td></tr>
+    {% endfor %}
+    </tbody></table></div>
+  {% else %}<p class="vazio">Nenhum boleto ainda.</p>{% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block titulo %}Boleto {{ b.id }}{% endblock %}
+{% block conteudo %}
+{% set rot, cor = status_label(b.status) %}
+<header class="topo"><div><h1>Boleto #{{ b.id }}</h1><p class="sub">Confira todos os dados antes de enviar.</p></div>
+  <span class="selo selo-{{ cor }} grande">{{ rot }}</span></header>
+{% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+{% if b.erro and b.status == 'erro' and not erro %}<div class="alerta alerta-erro">{{ b.erro }}</div>{% endif %}
+
+<section class="painel estreito">
+  <dl class="dados">
+    <dt>Valor</dt><dd class="valor-grande">{{ b.valor_centavos | brl }}</dd>
+    <dt>Beneficiário</dt><dd>{{ b.beneficiario_texto or "—" }}<br><small class="mudo">texto lido do PDF, não verificado</small></dd>
+    <dt>CNPJ/CPF conferido pelo Inter</dt><dd>{% if b.cnpj_beneficiario %}<code>{{ b.cnpj_beneficiario }}</code>
+      {% else %}<strong class="aviso-txt">não informado</strong>{% endif %}</dd>
+    <dt>Vencimento</dt><dd>{{ b.data_vencimento }}</dd>
+    <dt>Pagamento agendado para</dt><dd>{{ b.data_pagamento }}</dd>
+    <dt>Código de barras</dt><dd><code class="quebra">{{ b.codigo_barras }}</code></dd>
+    {% if b.codigo_transacao %}<dt>Código no Inter</dt><dd><code>{{ b.codigo_transacao }}</code></dd>{% endif %}
+    {% if b.aprovadores %}<dt>Aprovações necessárias</dt><dd>{{ b.aprovadores }}</dd>{% endif %}
+  </dl>
+  {% if not b.cnpj_beneficiario and b.status in enviaveis %}
+  <div class="alerta alerta-erro">O PDF não trouxe o CNPJ/CPF do beneficiário, então o Inter <strong>não vai conferir o destinatário</strong>. Confira nome e valor com atenção no app antes de aprovar.</div>
+  {% endif %}
+
+  {% if b.status in enviaveis %}
+  <form method="post" action="/boleto/{{ b.id }}/enviar" class="confirma">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <label>Para agendar no Inter, digite <strong>ENVIAR</strong><input name="confirmacao" autocomplete="off" required></label>
+    <div class="acoes"><button class="btn">Agendar para aprovação</button>
+    {% if b.status != 'enviando' %}<button class="btn btn-sec" formaction="/boleto/{{ b.id }}/descartar" formnovalidate>Descartar</button>{% endif %}</div>
+  </form>
+  {% elif b.codigo_transacao and b.status not in ('CANCELADO', 'PAGO') %}
+  <div class="alerta alerta-info"><strong>Próximo passo:</strong> abra o app do Inter, vá em aprovações e <u>confira o beneficiário e o valor</u> antes de aprovar.</div>
+  <form method="post" action="/boleto/{{ b.id }}/cancelar" class="confirma">
+    <input type="hidden" name="csrf_token" value="{{ csrf }}">
+    <div class="acoes"><button class="btn btn-sec">Cancelar agendamento</button></div>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

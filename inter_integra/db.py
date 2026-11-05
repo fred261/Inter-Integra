@@ -57,6 +57,25 @@ CREATE TABLE IF NOT EXISTS pagamentos (
 );
 CREATE INDEX IF NOT EXISTS ix_pagamentos_status ON pagamentos(status);
 
+CREATE TABLE IF NOT EXISTS boletos (
+    id INTEGER PRIMARY KEY,
+    codigo_barras TEXT NOT NULL UNIQUE,  -- 44 dígitos; impede o mesmo boleto duas vezes
+    linha_digitavel TEXT,
+    tipo TEXT NOT NULL,
+    valor_centavos INTEGER NOT NULL CHECK (valor_centavos > 0),
+    data_vencimento TEXT NOT NULL,
+    data_pagamento TEXT NOT NULL,
+    cnpj_beneficiario TEXT,
+    beneficiario_texto TEXT,
+    arquivo TEXT,
+    status TEXT NOT NULL DEFAULT 'rascunho',
+    codigo_transacao TEXT,
+    aprovadores INTEGER,
+    erro TEXT,
+    criado_em TEXT NOT NULL DEFAULT (datetime('now')),
+    atualizado_em TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 -- Só endpoint, status HTTP e resumo. Nunca tokens ou segredos.
 CREATE TABLE IF NOT EXISTS log (
     id INTEGER PRIMARY KEY,
@@ -68,8 +87,8 @@ CREATE TABLE IF NOT EXISTS log (
 """
 
 
-def connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(db_path)
+def connect(db_path: Path, timeout: float = 5.0) -> sqlite3.Connection:
+    conn = sqlite3.connect(db_path, timeout=timeout)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import os
+import sqlite3
 import time
 from datetime import date, datetime, timedelta
 
@@ -13,6 +14,8 @@ from .config import Settings
 ESCOPOS_PADRAO = "extrato.read"
 ESCOPO_PIX_WRITE = "pagamento-pix.write"
 ESCOPO_PIX_READ = "pagamento-pix.read"
+ESCOPO_BOLETO_WRITE = "pagamento-boleto.write"
+ESCOPO_BOLETO_READ = "pagamento-boleto.read"
 MARGEM_TOKEN_S = 120  # renova antes de expirar; o endpoint de token limita a 5/min
 MAX_DIAS_EXTRATO = 90
 
@@ -69,13 +72,19 @@ class InterClient:
 
     # --- requisições -------------------------------------------------
     def _log(self, endpoint: str, status: int | None, resumo: str) -> None:
-        if not self.s.db_path.exists():
-            return
-        conn = db.connect(self.s.db_path)
-        with conn:
-            conn.execute("INSERT INTO log (endpoint, status_http, resumo) VALUES (?, ?, ?)",
-                         (endpoint, status, resumo[:200]))
-        conn.close()
+        """Melhor esforço: falha no log nunca pode derrubar (nem mascarar) uma chamada à API."""
+        try:
+            if not self.s.db_path.exists():
+                return
+            conn = db.connect(self.s.db_path, timeout=1.0)
+            try:
+                with conn:
+                    conn.execute("INSERT INTO log (endpoint, status_http, resumo) VALUES (?, ?, ?)",
+                                 (endpoint, status, resumo[:200]))
+            finally:
+                conn.close()
+        except sqlite3.Error:
+            pass
 
     def _chamar(self, metodo: str, caminho: str, escopos: str, params: dict | None = None,
                 json_body: dict | None = None, headers: dict | None = None):
@@ -91,7 +100,7 @@ class InterClient:
             break
         if not r.is_success:
             raise InterError(r.status_code, _resumo(r))
-        return r.json()
+        return r.json() if r.content else None  # DELETE devolve 204 sem corpo
 
     def get(self, caminho: str, params: dict | None = None, escopos: str = ESCOPOS_PADRAO):
         return self._chamar("GET", caminho, escopos, params=params)
@@ -107,6 +116,17 @@ class InterClient:
 
     def consultar_pix(self, codigo_solicitacao: str) -> dict:
         return self.get(f"/banking/v2/pix/{codigo_solicitacao}", escopos=ESCOPO_PIX_READ)
+
+    def incluir_boleto(self, payload: dict) -> dict:
+        """POST /banking/v2/pagamento. ATENÇÃO: a API não tem cabeçalho de idempotência para
+        boleto; quem chama deve garantir que não reenvia às cegas (ver boletos.enviar)."""
+        return self._chamar("POST", "/banking/v2/pagamento", ESCOPO_BOLETO_WRITE, json_body=payload)
+
+    def buscar_boletos(self, **filtros) -> list[dict]:
+        return self.get("/banking/v2/pagamento", filtros or None, escopos=ESCOPO_BOLETO_READ)
+
+    def cancelar_boleto(self, codigo_transacao: str) -> None:
+        self._chamar("DELETE", f"/banking/v2/pagamento/{codigo_transacao}", ESCOPO_BOLETO_WRITE)
 
     def extrato(self, inicio: date, fim: date) -> dict:
         _validar_periodo(inicio, fim)

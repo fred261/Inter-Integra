@@ -61,4 +61,24 @@ Proteções: escuta só em 127.0.0.1; rejeita `Host` que não seja localhost (co
 4. Interface web local ✅
 5. LaunchAgents: Pix semanal da Val (segunda, para a sexta), atualização horária de status, extrato diário
 6. Migração para produção (validar campos/status reais da API)
-7. Boletos: upload do PDF, leitura local da linha digitável com validação dos dígitos, pré-visualização (beneficiário, valor, vencimento) e agendamento na data de vencimento; exige o escopo de Pagamentos e leitura da documentação dessa parte da API
+7. Boletos ✅ (código pronto e testado com respostas simuladas; aguarda teste real com o Inter)
+
+## Etapa 7 — boletos
+
+```bash
+python -m inter_integra boleto ~/Downloads/conta.pdf        # lê, mostra a prévia, pede ENVIAR
+python -m inter_integra boleto-codigo                       # para foto/PDF sem texto: cole a linha digitável
+python -m inter_integra boletos-inter                       # lista o que o Inter tem (últimos 30 dias)
+```
+Ou na interface web, tela **Boletos**: envie o PDF, confira e digite `ENVIAR`.
+
+Como funciona (conforme a documentação da API Banking do Inter): `POST /banking/v2/pagamento` com escopo `pagamento-boleto.write`, agendado para o vencimento; aprovação no app do Inter; consulta por `GET /banking/v2/pagamento`; cancelamento do agendamento por `DELETE /banking/v2/pagamento/{codigoTransacao}`.
+
+- **Leitura local do PDF:** extrai a linha digitável, valida os dígitos verificadores (linha digitável com erro é recusada) e calcula valor e vencimento do próprio código. O PDF é tratado como dado não confiável: só se extrai texto.
+- **Beneficiário:** o Inter não consulta o boleto antes de pagar. O CNPJ/CPF do beneficiário lido do PDF vai em `cpfCnpjBeneficiario`, e o Inter recusa se não bater com o real. Sem CNPJ no PDF, a tela avisa e a conferência fica por sua conta no app.
+- **Sem duplicidade:** a API de boleto **não tem idempotência**. Por isso: código de barras único no banco; estado `enviando` gravado antes da chamada; se a resposta se perder, o reenvio consulta o Inter antes de mandar de novo.
+- **Recusas:** boleto vencido (juros/multa), valor livre, valor acima do teto, PDF sem texto, mais de um código no mesmo PDF, PDF maior que 5 MB.
+- **Data de pagamento:** o vencimento; se cair no fim de semana, a sexta anterior. Feriados não são tratados.
+- **Contas de consumo/convênio (48 dígitos):** o valor vem do código, mas o vencimento é lido do texto do PDF ou informado por você.
+
+Ainda não validado contra a API real: lista de status do boleto (`statusPagamento`; só `EMPROCESSAMENTO` aparece na documentação), comportamento do Inter com pagamento agendado e aprovação, e se a sua integração tem o escopo `pagamento-boleto`.

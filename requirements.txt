@@ -5,3 +5,5 @@ keyring
 jinja2
 python-multipart
 pytest
+pypdf
+reportlab  # só para os testes gerarem PDFs de exemplo
