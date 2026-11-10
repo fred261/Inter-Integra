@@ -132,9 +132,6 @@ def parse_codigo(codigo: str, hoje: date | None = None) -> Boleto:
 
 
 # --- texto / PDF --------------------------------------------------------
-_RE_47 = re.compile(r"\b\d{5}[.\s]?\d{5}\s+\d{5}[.\s]?\d{6}\s+\d{5}[.\s]?\d{6}\s+\d\s+\d{14}\b")
-_RE_48 = re.compile(r"\b(?:\d{11}[-\s]?\d\s+){3}\d{11}[-\s]?\d\b")
-_RE_44 = re.compile(r"\b\d{44}\b")
 _RE_CNPJ = re.compile(r"\b(\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2})\b")
 _RE_CPF = re.compile(r"\b(\d{3}\.?\d{3}\.?\d{3}-?\d{2})\b")
 _RE_DATA = re.compile(r"\b(\d{2})/(\d{2})/(\d{4})\b")
@@ -162,22 +159,59 @@ def _vencimento_texto(texto: str) -> date | None:
         return None
 
 
+_COMPRIMENTOS = (44, 47, 48)
+_LIGACAO = re.compile(r"^[\s.\-]{0,8}$")  # o que pode separar dois grupos de dígitos do mesmo código
+
+
+def _candidatos(texto: str) -> list[str]:
+    """Todas as sequências de grupos de dígitos vizinhos (separados só por espaço, quebra de linha,
+    ponto ou traço) cujo total tem 44, 47 ou 48 dígitos. Independe de como o PDF formata o código;
+    quem decide se é um boleto são os dígitos verificadores."""
+    grupos = [(m.start(), m.end(), m.group()) for m in re.finditer(r"\d+", texto)]
+    cadeias, atual = [], []
+    for g in grupos:
+        if atual and _LIGACAO.match(texto[atual[-1][1]:g[0]]):
+            atual.append(g)
+        else:
+            if atual:
+                cadeias.append(atual)
+            atual = [g]
+    if atual:
+        cadeias.append(atual)
+    achados: list[str] = []
+    for cadeia in cadeias:
+        for i in range(len(cadeia)):
+            total = 0
+            for j in range(i, len(cadeia)):
+                total += len(cadeia[j][2])
+                if total > max(_COMPRIMENTOS):
+                    break
+                if total in _COMPRIMENTOS:
+                    achados.append("".join(x[2] for x in cadeia[i:j + 1]))
+    return list(dict.fromkeys(achados))
+
+
+def analisar(texto: str, hoje: date | None = None) -> tuple[dict[str, Boleto], list[str]]:
+    """(boletos válidos por código de barras, motivos de recusa dos candidatos inválidos)."""
+    hoje = hoje or date.today()
+    validos: dict[str, Boleto] = {}
+    motivos: list[str] = []
+    for cand in _candidatos(texto):
+        try:
+            b = parse_codigo(cand, hoje)
+        except BoletoInvalido as e:
+            motivos.append(f"{len(cand)} dígitos: {e}")
+            continue
+        validos.setdefault(b.codigo_barras, b)
+    return validos, motivos
+
+
 def parse_texto(texto: str, hoje: date | None = None) -> Boleto:
     """Procura o código no texto de um boleto. Se houver mais de um código distinto, recusa."""
-    hoje = hoje or date.today()
-    achados: dict[str, Boleto] = {}
-    erros: list[str] = []
-    for rx in (_RE_47, _RE_48, _RE_44):
-        for m in rx.finditer(texto):
-            try:
-                b = parse_codigo(m.group(0), hoje)
-            except BoletoInvalido as e:
-                erros.append(str(e))
-                continue
-            achados.setdefault(b.codigo_barras, b)
+    achados, motivos = analisar(texto, hoje)
     if not achados:
-        raise BoletoInvalido("nenhum código de boleto válido encontrado"
-                             + (f" ({erros[0]})" if erros else ""))
+        extra = f" (candidatos recusados: {motivos[0]})" if motivos else " (nenhuma sequência de 44, 47 ou 48 dígitos)"
+        raise BoletoInvalido("nenhum código de boleto válido encontrado" + extra)
     if len(achados) > 1:
         raise BoletoInvalido("mais de um código de boleto no documento; envie um por arquivo")
     b = next(iter(achados.values()))
@@ -186,7 +220,19 @@ def parse_texto(texto: str, hoje: date | None = None) -> Boleto:
     return Boleto(b.tipo, b.linha_digitavel, b.codigo_barras, b.valor_centavos, venc, cnpj, nome)
 
 
-def texto_do_pdf(conteudo: bytes) -> str:
+def diagnostico(texto: str, hoje: date | None = None) -> str:
+    """Relatório que NÃO contém dados do boleto: dígitos viram '#' e nomes não aparecem."""
+    achados, motivos = analisar(texto, hoje)
+    mascarado = re.sub(r"\d", "#", re.sub(r"[^\W\d_]+", "x", texto))
+    linhas = [f"caracteres extraídos: {len(texto)}", f"códigos válidos: {len(achados)}"]
+    linhas += [f"candidato recusado -> {m}" for m in motivos[:5]]
+    linhas += ["--- estrutura do texto (letras = x, dígitos = #) ---", *(" ".join(mascarado.split()) [i:i + 110]
+              for i in range(0, min(len(" ".join(mascarado.split())), 1600), 110))]
+    return "\n".join(linhas)
+
+
+def textos_do_pdf(conteudo: bytes) -> list[str]:
+    """Texto do PDF por mais de um modo de extração (o mesmo PDF pode sair bem diferente)."""
     if len(conteudo) > MAX_PDF_BYTES:
         raise BoletoInvalido("arquivo maior que 5 MB")
     if not conteudo.startswith(b"%PDF"):
@@ -196,15 +242,33 @@ def texto_do_pdf(conteudo: bytes) -> str:
         leitor = PdfReader(io.BytesIO(conteudo))
         if leitor.is_encrypted:
             raise BoletoInvalido("PDF protegido por senha")
-        return "\n".join((p.extract_text() or "") for p in leitor.pages[:5])
+        paginas = leitor.pages[:5]
+        textos = ["\n".join((p.extract_text() or "") for p in paginas)]
+        try:
+            textos.append("\n".join((p.extract_text(extraction_mode="layout") or "") for p in paginas))
+        except Exception:  # o modo layout é complementar; falhar nele não invalida o PDF
+            pass
+        return textos
     except BoletoInvalido:
         raise
     except Exception as e:  # pypdf lança vários tipos em PDFs malformados
         raise BoletoInvalido(f"não consegui ler o PDF ({e.__class__.__name__})") from None
 
 
+def texto_do_pdf(conteudo: bytes) -> str:
+    return textos_do_pdf(conteudo)[0]
+
+
 def parse_pdf(conteudo: bytes, hoje: date | None = None) -> Boleto:
-    texto = texto_do_pdf(conteudo)
-    if not texto.strip():
-        raise BoletoInvalido("PDF sem texto (provavelmente imagem/foto); use o código digitado")
-    return parse_texto(texto, hoje)
+    textos = textos_do_pdf(conteudo)
+    if not any(t.strip() for t in textos):
+        raise BoletoInvalido("PDF sem texto (provavelmente imagem/foto); cole a linha digitável")
+    erro: BoletoInvalido | None = None
+    for texto in textos:
+        try:
+            return parse_texto(texto, hoje)
+        except BoletoInvalido as e:
+            erro = erro or e
+            if "mais de um" in str(e):
+                raise
+    raise erro  # type: ignore[misc]

@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import boleto as bl, boletos as bs, credentials, db, pagamentos as pg
+from . import boleto as bl, entrada as entrada_mod, boletos as bs, credentials, db, pagamentos as pg
 from .client import InterClient, InterError
 from .config import Settings
 from .versao import codigo_versao
@@ -372,6 +372,13 @@ def create_app(settings: Settings,
     @app.get("/boletos", response_class=HTMLResponse)
     def boletos(request: Request, conn=Depends(get_conn)):
         return render(request, "boletos.html", itens=lista_boletos(conn), erro=None, **extra_boletos(conn))
+
+    @app.post("/boletos/pasta", dependencies=[Depends(checar_csrf)])
+    def boletos_pasta(request: Request, conn=Depends(get_conn)):
+        res = entrada_mod.processar_pasta(settings, conn, agora=time.time() + 10)  # inclui arquivos recém-soltos
+        erros = [f"{r.arquivo}: {r.detalhe}" for r in res if not r.ok]
+        return render(request, "boletos.html", itens=lista_boletos(conn), erro=" | ".join(erros) or None,
+                      lidos=sum(r.ok for r in res), **extra_boletos(conn))
 
     @app.post("/boletos/conferir", dependencies=[Depends(checar_csrf)])
     def boleto_conferir(request: Request, arquivo: UploadFile | None = File(None),

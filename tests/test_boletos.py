@@ -249,3 +249,71 @@ def test_descartar(env):
     bid = novo(conn)
     bs.descartar(conn, bid)
     assert conn.execute("SELECT count(*) FROM boletos").fetchone()[0] == 0
+
+
+# --- formatos reais variados de PDF ---------------------------------------
+def _linha(dias=20, valor=34567):
+    return linha_de(make_barras(fator_de(date.today() + timedelta(days=dias)), valor))
+
+
+@pytest.mark.parametrize("fmt", [
+    lambda l: f"{l[:5]}.{l[5:10]} {l[10:15]}.{l[15:21]} {l[21:26]}.{l[26:32]} {l[32]} {l[33:]}",   # padrão
+    lambda l: f"{l[:5]}.{l[5:10]}  {l[10:15]}.{l[15:21]}  {l[21:26]}.{l[26:32]}  {l[32]}  {l[33:]}",  # espaço duplo
+    lambda l: f"{l[:5]}.{l[5:10]}\n{l[10:15]}.{l[15:21]}\n{l[21:26]}.{l[26:32]}\n{l[32]}\n{l[33:]}",  # um campo por linha
+    lambda l: f"{l[:10]} {l[10:21]} {l[21:32]} {l[32]} {l[33:]}",                                   # sem pontos
+    lambda l: f"{l[:5]}-{l[5:10]} {l[10:15]}-{l[15:21]} {l[21:26]}-{l[26:32]} {l[32]} {l[33:]}",      # traços
+    lambda l: l,                                                                                     # tudo colado
+    lambda l: f"{l[:5]} {l[5:10]} {l[10:15]} {l[15:21]} {l[21:26]} {l[26:32]} {l[32]} {l[33:]}",      # grupos soltos
+])
+def test_formatos_de_linha_digitavel(fmt):
+    linha = _linha()
+    texto = f"Pagador: JOAO\nNosso numero 12345678-9  Agencia 1234/56789-0\nVencimento 10/12/2026\n{fmt(linha)}\nAutenticacao mecanica"
+    b = bl.parse_texto(texto, date.today())
+    assert b.valor_centavos == 34567
+
+
+def test_codigo_de_barras_44_e_linha_do_mesmo_boleto_nao_contam_como_dois():
+    barras = make_barras(fator_de(date.today() + timedelta(days=20)), 9900)
+    texto = f"{formata(linha_de(barras))}\nCodigo de barras: {barras}"
+    assert bl.parse_texto(texto, date.today()).valor_centavos == 9900
+
+
+def test_numeros_vizinhos_nao_atrapalham():
+    linha = formata(linha_de(make_barras(fator_de(date.today() + timedelta(days=20)), 1500)))
+    texto = f"CNPJ 12.345.678/0001-95 Valor 15,00 Doc 000123 456789 {linha} 99999 11111"
+    assert bl.parse_texto(texto, date.today()).valor_centavos == 1500
+
+
+def test_convenio_48_com_tracos_e_espacos():
+    l = "".join(SANDBOX_CONVENIO)  # 44 dígitos (código de barras): monta a linha de 48 com DV mod 11
+    blocos = [l[i:i + 11] for i in range(0, 44, 11)]
+    calc = bl._mod10 if int(l[2]) in (6, 7) else bl._mod11_convenio
+    linha = [b + str(calc(b)) for b in blocos]
+    texto = "Pague ate o vencimento 31/12/2026\n" + " ".join(f"{x[:11]}-{x[11]}" for x in linha)
+    b = bl.parse_texto(texto, HOJE)
+    assert b.tipo == "convenio" and b.valor_centavos == 6533 and b.vencimento == date(2026, 12, 31)
+
+
+def test_diagnostico_nao_vaza_digitos_nem_nomes():
+    linha = formata(_linha())
+    texto = f"Beneficiario: EMPRESA SECRETA LTDA CNPJ 12.345.678/0001-95\n{linha}"
+    rel = bl.diagnostico(texto, date.today())
+    assert "códigos válidos: 1" in rel
+    assert not any(c.isdigit() for c in rel.split("estrutura")[1])  # nenhum dígito na estrutura
+    assert "SECRETA" not in rel and "12.345" not in rel
+
+
+def test_erro_informa_motivo_do_candidato_recusado():
+    ruim = formata(_linha())
+    ruim = ruim[:20] + ("1" if ruim[20] != "1" else "2") + ruim[21:]
+    with pytest.raises(bl.BoletoInvalido, match="recusados"):
+        bl.parse_texto(f"linha {ruim}", date.today())
+    with pytest.raises(bl.BoletoInvalido, match="nenhuma sequência"):
+        bl.parse_texto("Vencimento 10/12/2026 valor 15,00", date.today())
+
+
+def test_pdf_com_linha_quebrada_em_varias_linhas():
+    linha = _linha()
+    pdf = pdf_com("Beneficiario: LOJA CNPJ 12.345.678/0001-95\n" + f"{linha[:5]}.{linha[5:10]}\n{linha[10:15]}.{linha[15:21]}\n"
+                  f"{linha[21:26]}.{linha[26:32]}\n{linha[32]}\n{linha[33:]}")
+    assert bl.parse_pdf(pdf, date.today()).valor_centavos == 34567

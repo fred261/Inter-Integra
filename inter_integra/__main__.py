@@ -178,6 +178,17 @@ def cmd_boleto(s, args) -> int:
     return _fluxo_boleto(s, _abrir(s), b, Path(args[0]).name, parse_data(args[1]) if len(args) > 1 else None)
 
 
+def cmd_boleto_diagnostico(s, args) -> int:
+    """Mostra por que um PDF não foi lido, sem expor dados do boleto (dígitos viram #)."""
+    if len(args) != 1:
+        print("Uso: boleto-diagnostico ARQUIVO.pdf")
+        return 2
+    conteudo = Path(args[0]).expanduser().read_bytes()
+    for i, texto in enumerate(boleto_mod.textos_do_pdf(conteudo), 1):
+        print(f"===== extração {i} =====\n{boleto_mod.diagnostico(texto)}")
+    return 0
+
+
 def cmd_boleto_codigo(s, args) -> int:
     b = boleto_mod.parse_codigo(input("Linha digitável ou código de barras: "))
     return _fluxo_boleto(s, _abrir(s), b, None, parse_data(args[0]) if args else None)
@@ -230,9 +241,13 @@ def _subir_web(s):
 
     from .web import create_app
     db.init_db(s.db_path).close()  # cria tabelas novas (ex.: boletos) em bancos antigos
+    ensure_entrada(s)  # pastas de boletos (entrada/processados/erros), mesmo em instalações antigas
 
     def subir(p: int) -> None:
+        import threading
+        threading.Thread(target=entrada.vigiar, args=(s, threading.Event()), daemon=True).start()
         print(f"Interface em http://localhost:{p} (somente neste computador). Ctrl+C para sair.")
+        print(f"Pasta de boletos: {s.entrada_dir} (PDFs soltos ali aparecem em Boletos)")
         uvicorn.run(create_app(s), host="127.0.0.1", port=p, log_level="warning")
     return subir
 
@@ -264,7 +279,7 @@ COMANDOS = {"init": cmd_init, "credenciais": cmd_credenciais, "status": cmd_stat
             "beneficiario-add": cmd_beneficiario_add, "pix-chave": cmd_pix_chave,
             "pix-caju": cmd_pix_caju, "atualizar": cmd_atualizar, "web": cmd_web,
             "abrir": cmd_abrir, "versao": cmd_versao, "entrada": cmd_entrada, "agente-entrada": cmd_agente, "atalho": cmd_atalho,
-            "boleto": cmd_boleto, "boleto-codigo": cmd_boleto_codigo, "boletos-inter": cmd_boletos_inter}
+            "boleto": cmd_boleto, "boleto-codigo": cmd_boleto_codigo, "boleto-diagnostico": cmd_boleto_diagnostico, "boletos-inter": cmd_boletos_inter}
 _COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status", "web", "entrada", "agente-entrada", "atalho", "abrir", "versao"}
 
 

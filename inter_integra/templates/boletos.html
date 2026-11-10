@@ -2,7 +2,7 @@
 {% block titulo %}Boletos{% endblock %}
 {% block conteudo %}
 <header class="topo"><div><h1>Boletos</h1><p class="sub">Envie o PDF da conta. O sistema lê o código, confere os dígitos e agenda o pagamento no vencimento.</p></div></header>
-{% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+{% if erro %}<div class="alerta alerta-erro">{{ erro }}{% if 'nenhum código' in erro or 'sem texto' in erro %}<br><small>Se o PDF for foto ou digitalização, ou o código não foi reconhecido, cole a linha digitável no campo abaixo. Para investigar, rode no Terminal: <code>python -m inter_integra boleto-diagnostico ARQUIVO.pdf</code></small>{% endif %}</div>{% endif %}
 {% if para_conferir %}<div class="alerta alerta-info"><strong>{{ para_conferir }} boleto(s) aguardando a sua conferência.</strong> Clique no número na lista abaixo, confira e envie.</div>{% endif %}
 
 <section class="painel estreito">
@@ -18,7 +18,9 @@
 
 <section class="painel estreito">
   <h2>Entrada por pasta</h2>
-  <p class="dica">Solte os PDFs em <code class="quebra">{{ pasta_entrada }}</code>. Com o agente instalado, eles aparecem aqui sozinhos como "Rascunho", prontos para conferir. Nada é enviado ao Inter sem a sua confirmação.</p>
+  <p class="dica">Solte os PDFs em <code class="quebra">{{ pasta_entrada }}</code>. Enquanto esta tela do sistema estiver aberta, eles aparecem aqui sozinhos, em poucos segundos, como "Rascunho", prontos para conferir. Nada é enviado ao Inter sem a sua confirmação.</p>
+  <form method="post" action="/boletos/pasta"><input type="hidden" name="csrf_token" value="{{ csrf }}"><button class="btn btn-sec">Ler a pasta agora</button></form>
+  {% if lidos is defined %}<p class="dica">{{ lidos }} boleto(s) lido(s) da pasta.</p>{% endif %}
 </section>
 
 <section class="painel">

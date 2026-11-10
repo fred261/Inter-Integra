@@ -106,3 +106,29 @@ def test_plist_do_agente():
     assert d["ProgramArguments"] == ["/u/.venv/bin/python", "-m", "inter_integra", "entrada"]
     assert d["WatchPaths"] == ["/u/PagamentosInter/boletos/entrada"]
     assert d["EnvironmentVariables"]["INTER_AMBIENTE"] == "producao"
+
+
+def test_vigiar_processa_em_segundo_plano_e_para(env):
+    import threading
+    s, conn = env
+    parar = threading.Event()
+    th = threading.Thread(target=entrada.vigiar, args=(s, parar, 0.1), daemon=True)
+    th.start()
+    solta(s, "nova.pdf", pdf())
+    fim = time.time() + 5
+    while time.time() < fim and conn.execute("SELECT count(*) FROM boletos").fetchone()[0] == 0:
+        time.sleep(0.1)
+    parar.set()
+    th.join(timeout=3)
+    assert conn.execute("SELECT status FROM boletos").fetchone()[0] == "rascunho" and not th.is_alive()
+
+
+def test_pasta_e_criada_ao_subir_instalacao_antiga(tmp_path):
+    """Regressão: init antigo não criava boletos/entrada; abrir a interface passa a criar."""
+    from inter_integra import __main__ as cli
+    s = Settings(home=tmp_path / "p")
+    ensure_home(s)
+    db.init_db(s.db_path).close()
+    assert not s.entrada_dir.exists()
+    cli._subir_web(s)
+    assert s.entrada_dir.is_dir() and s.processados_dir.is_dir() and s.erros_dir.is_dir()

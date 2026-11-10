@@ -100,3 +100,9 @@ python -m inter_integra atalho             # cria ~/Desktop/"Inter Integra.comma
 Duplo clique: inicia a interface no ambiente gravado no atalho e abre o navegador (se já estiver rodando, só abre a página).
 
 A tela **Copia e Cola** (antes "Caju") serve para qualquer código Pix Copia e Cola, com descrição editável. O sistema **lê o valor e o recebedor do próprio código** (padrão EMV/BR Code), confere o CRC para pegar colagens cortadas e recusa se o valor digitado divergir do código. Pix dinâmico (com URL) normalmente não traz o valor: nesse caso ele precisa ser informado. Nome e cidade do recebedor mostrados vêm do código e não são verificados; confirme o destinatário real no app do Inter.
+
+## Diagnóstico de boleto e pasta de entrada (atualização)
+
+- A leitura do PDF agora procura **qualquer sequência de 44/47/48 dígitos** com separadores variados (espaço, quebra de linha, ponto, traço) e valida pelos dígitos verificadores; tenta também a extração em modo *layout*. A mensagem de erro informa o motivo do candidato recusado.
+- `python -m inter_integra boleto-diagnostico ARQUIVO.pdf` mostra por que um PDF não foi lido **sem expor dados** (dígitos viram `#`, letras viram `x`): dá para colar a saída num chamado/conversa com segurança.
+- Ao abrir a interface (`web`, `abrir` ou o atalho), as pastas `~/PagamentosInter/boletos/{entrada,processados,erros}` são criadas sozinhas, e a pasta de entrada é vigiada a cada 15 s enquanto a interface estiver aberta. A tela **Boletos** tem o botão "Ler a pasta agora".

@@ -98,3 +98,20 @@ def test_csrf_vale_para_boletos(ctx):
     c, _, _ = ctx
     assert c.post("/boletos/conferir", data={"codigo": "1"}).status_code in (403, 422)
     assert c.post("/boleto/1/enviar", data={"csrf_token": "x", "confirmacao": "ENVIAR"}).status_code == 403
+
+
+def test_botao_ler_pasta_agora(ctx, tmp_path):
+    import os, time
+    from inter_integra.config import ensure_entrada
+    c, _, _ = ctx
+    # a pasta usada pelo app é a do Settings do fixture; descobre pelo texto da página
+    pasta = re.search(r"<code class=\"quebra\">([^<]+/boletos/entrada)</code>", c.get("/boletos").text).group(1)
+    from pathlib import Path
+    from inter_integra.config import Settings
+    s = Settings(home=Path(pasta).parent.parent)
+    ensure_entrada(s)
+    arq = s.entrada_dir / "agora.pdf"
+    arq.write_bytes(pdf_valido())
+    r = c.post("/boletos/pasta", data={"csrf_token": tok(c)})  # sem esperar os 3 s de estabilização
+    assert r.status_code == 200 and "1 boleto(s) lido(s)" in r.text
+    assert not arq.exists() and "Rascunho" in r.text

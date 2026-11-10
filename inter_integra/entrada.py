@@ -9,6 +9,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from datetime import date
@@ -63,6 +64,23 @@ def processar_pasta(s: Settings, conn, hoje: date | None = None, agora: float | 
             os.replace(arq, _destino(s.processados_dir, f"{bid}_{arq.name}"))
             saida.append(Resultado(arq.name, True, str(bid)))
     return saida
+
+
+def vigiar(s: Settings, parar: threading.Event, intervalo: float = 15.0) -> None:
+    """Roda em segundo plano enquanto a interface está aberta: lê a pasta de tempos em tempos."""
+    from . import db
+    while not parar.is_set():
+        try:
+            conn = db.connect(s.db_path)
+            try:
+                res = processar_pasta(s, conn)
+            finally:
+                conn.close()
+            if res:
+                notificar(sum(r.ok for r in res), sum(not r.ok for r in res))
+        except Exception:  # um arquivo/banco problemático não pode derrubar a vigilância
+            pass
+        parar.wait(intervalo)
 
 
 def notificar(ok: int, erros: int) -> None:
