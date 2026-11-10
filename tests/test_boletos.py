@@ -317,3 +317,21 @@ def test_pdf_com_linha_quebrada_em_varias_linhas():
     pdf = pdf_com("Beneficiario: LOJA CNPJ 12.345.678/0001-95\n" + f"{linha[:5]}.{linha[5:10]}\n{linha[10:15]}.{linha[15:21]}\n"
                   f"{linha[21:26]}.{linha[26:32]}\n{linha[32]}\n{linha[33:]}")
     assert bl.parse_pdf(pdf, date.today()).valor_centavos == 34567
+
+
+def test_diagnostico_resume_leitura_sem_valores():
+    linha = formata(_linha(valor=34567))
+    rel = bl.diagnostico(f"Beneficiario: LOJA CNPJ 12.345.678/0001-95\n{linha}", date.today())
+    assert "valor: lido" in rel and "vencimento: lido" in rel and "CNPJ/CPF do beneficiário: lido" in rel
+    assert "345,67" not in rel and "34567" not in rel
+
+
+def test_numero_de_48_digitos_que_nao_e_convenio_tem_mensagem_clara():
+    with pytest.raises(bl.BoletoInvalido, match="não começam com 8"):
+        bl.parse_codigo("1" * 48)
+
+
+def test_leitura_de_pdf_nao_imprime_avisos_de_fonte(capfd):
+    import logging
+    bl.parse_pdf(pdf_com(f"{formata(_linha())}"), date.today())
+    assert logging.getLogger("pypdf").level == logging.ERROR

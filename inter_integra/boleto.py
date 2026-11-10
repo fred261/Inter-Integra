@@ -128,6 +128,8 @@ def parse_codigo(codigo: str, hoje: date | None = None) -> Boleto:
         return _bancario_44(d, hoje)
     if len(d) in (44, 48) and d[0] == "8":
         return _convenio(d)
+    if len(d) == 48:
+        raise BoletoInvalido("48 dígitos que não começam com 8 (não é conta de consumo/convênio)")
     raise BoletoInvalido(f"código com {len(d)} dígitos; esperado 44, 47 ou 48")
 
 
@@ -225,6 +227,14 @@ def diagnostico(texto: str, hoje: date | None = None) -> str:
     achados, motivos = analisar(texto, hoje)
     mascarado = re.sub(r"\d", "#", re.sub(r"[^\W\d_]+", "x", texto))
     linhas = [f"caracteres extraídos: {len(texto)}", f"códigos válidos: {len(achados)}"]
+    if len(achados) == 1:
+        try:
+            b = parse_texto(texto, hoje)
+            linhas.append(f"tipo: {b.tipo} | valor: {'lido' if b.valor_centavos else 'NÃO lido'} | "
+                          f"vencimento: {'lido' if b.vencimento else 'NÃO lido'} | "
+                          f"CNPJ/CPF do beneficiário: {'lido' if b.cnpj_beneficiario else 'NÃO encontrado'}")
+        except BoletoInvalido as e:
+            linhas.append(f"leitura dos dados falhou: {e}")
     linhas += [f"candidato recusado -> {m}" for m in motivos[:5]]
     linhas += ["--- estrutura do texto (letras = x, dígitos = #) ---", *(" ".join(mascarado.split()) [i:i + 110]
               for i in range(0, min(len(" ".join(mascarado.split())), 1600), 110))]
@@ -237,7 +247,10 @@ def textos_do_pdf(conteudo: bytes) -> list[str]:
         raise BoletoInvalido("arquivo maior que 5 MB")
     if not conteudo.startswith(b"%PDF"):
         raise BoletoInvalido("o arquivo não é um PDF")
+    import logging
+
     from pypdf import PdfReader
+    logging.getLogger("pypdf").setLevel(logging.ERROR)  # avisos de fontes CFF: ruído, não afetam o texto
     try:
         leitor = PdfReader(io.BytesIO(conteudo))
         if leitor.is_encrypted:

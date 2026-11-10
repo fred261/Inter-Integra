@@ -7,3 +7,4 @@ python-multipart
 pytest
 pypdf
 reportlab  # só para os testes gerarem PDFs de exemplo
+fonttools  # melhora a leitura de PDFs com fontes embutidas (ex.: boletos do Itaú)
