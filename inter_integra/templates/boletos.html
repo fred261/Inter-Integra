@@ -3,6 +3,7 @@
 {% block conteudo %}
 <header class="topo"><div><h1>Boletos</h1><p class="sub">Envie o PDF da conta. O sistema lê o código, confere os dígitos e agenda o pagamento no vencimento.</p></div></header>
 {% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
+{% if para_conferir %}<div class="alerta alerta-info"><strong>{{ para_conferir }} boleto(s) aguardando a sua conferência.</strong> Clique no número na lista abaixo, confira e envie.</div>{% endif %}
 
 <section class="painel estreito">
   <form method="post" action="/boletos/conferir" enctype="multipart/form-data" class="coluna-form">
@@ -13,6 +14,11 @@
     <label>Vencimento <small>(só se o sistema não conseguir ler, como em contas de consumo)</small><input type="date" name="vencimento"></label>
     <button class="btn">Ler e conferir</button>
   </form>
+</section>
+
+<section class="painel estreito">
+  <h2>Entrada por pasta</h2>
+  <p class="dica">Solte os PDFs em <code class="quebra">{{ pasta_entrada }}</code>. Com o agente instalado, eles aparecem aqui sozinhos como "Rascunho", prontos para conferir. Nada é enviado ao Inter sem a sua confirmação.</p>
 </section>
 
 <section class="painel">

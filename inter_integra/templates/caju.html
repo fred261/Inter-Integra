@@ -1,14 +1,15 @@
 {% extends "base.html" %}
-{% block titulo %}Caju{% endblock %}
+{% block titulo %}Pix Copia e Cola{% endblock %}
 {% block conteudo %}
-<header class="topo"><div><h1>Recarga Caju</h1><p class="sub">Cole o código Pix Copia e Cola gerado pela Caju. Você confere antes de enviar.</p></div></header>
+<header class="topo"><div><h1>Pix Copia e Cola</h1><p class="sub">Cole o código de qualquer cobrança Pix (Caju, fornecedor etc.). Você confere antes de enviar.</p></div></header>
 {% if erro %}<div class="alerta alerta-erro">{{ erro }}</div>{% endif %}
 <section class="painel estreito">
   <form method="post" action="/caju/conferir" class="coluna-form">
     <input type="hidden" name="csrf_token" value="{{ csrf }}">
     <label>Código Pix Copia e Cola<textarea name="codigo" rows="5" required spellcheck="false">{{ codigo }}</textarea></label>
-    <label>Valor da recarga<input name="valor" value="{{ valor }}" placeholder="0,00" inputmode="decimal" required></label>
-    <p class="dica">O valor deve ser o mesmo da cobrança da Caju. Se divergir do código, o Inter pode recusar.</p>
+    <label>Valor<input name="valor" value="{{ valor }}" placeholder="0,00" inputmode="decimal" required></label>
+    <label>Descrição <small>(até 140 caracteres)</small><input name="descricao" value="{{ descricao or 'Recarga benefícios Caju' }}" maxlength="140"></label>
+    <p class="dica">O valor deve ser o mesmo da cobrança. Se divergir do que está dentro do código, o Inter pode recusar.</p>
     <button class="btn">Conferir</button>
   </form>
 </section>

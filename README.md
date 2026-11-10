@@ -82,3 +82,21 @@ Como funciona (conforme a documentação da API Banking do Inter): `POST /bankin
 - **Contas de consumo/convênio (48 dígitos):** o valor vem do código, mas o vencimento é lido do texto do PDF ou informado por você.
 
 Ainda não validado contra a API real: lista de status do boleto (`statusPagamento`; só `EMPROCESSAMENTO` aparece na documentação), comportamento do Inter com pagamento agendado e aprovação, e se a sua integração tem o escopo `pagamento-boleto`.
+
+## Entrada por pasta e atalho
+
+**Pasta de entrada de boletos.** PDFs soltos em `~/PagamentosInter/boletos/entrada` viram rascunhos para conferir (nada é enviado ao Inter sem a sua confirmação). Quem foi lido vai para `processados/`; quem teve problema vai para `erros/` com um `.erro.txt` explicando o motivo.
+```bash
+python -m inter_integra entrada            # processa a pasta uma vez
+python -m inter_integra agente-entrada     # gera o LaunchAgent e mostra os comandos para ligar/desligar
+```
+O agente roda `entrada` quando a pasta muda (e a cada 2 minutos) e mostra uma notificação do macOS. Ele não usa credenciais nem rede.
+
+**Atalho na Área de Trabalho.**
+```bash
+export INTER_AMBIENTE=producao
+python -m inter_integra atalho             # cria ~/Desktop/"Inter Integra.command"
+```
+Duplo clique: inicia a interface no ambiente gravado no atalho e abre o navegador (se já estiver rodando, só abre a página).
+
+A tela **Copia e Cola** (antes "Caju") serve para qualquer código Pix Copia e Cola, com descrição editável.

@@ -126,7 +126,8 @@ def create_app(settings: Settings,
         ult = conn.execute(
             "SELECT p.*, b.nome FROM pagamentos p LEFT JOIN beneficiarios b ON b.id = p.beneficiario_id "
             "WHERE p.status NOT IN ('rascunho') ORDER BY p.id DESC LIMIT 10").fetchall()
-        return render(request, "painel.html", saldo_centavos=None if saldo is None else round(saldo * 100),
+        para_conferir = conn.execute("SELECT count(*) FROM boletos WHERE status = 'rascunho'").fetchone()[0]
+        return render(request, "painel.html", para_conferir=para_conferir, saldo_centavos=None if saldo is None else round(saldo * 100),
                       erro_saldo=erro_saldo, pendentes=pend, ultimos=ult)
 
     @app.post("/atualizar", dependencies=[Depends(checar_csrf)])
@@ -184,16 +185,15 @@ def create_app(settings: Settings,
     # --- Caju ----------------------------------------------------------
     @app.get("/caju", response_class=HTMLResponse)
     def caju(request: Request):
-        return render(request, "caju.html", erro=None, codigo="", valor="")
+        return render(request, "caju.html", erro=None, codigo="", valor="", descricao="")
 
     @app.post("/caju/conferir", dependencies=[Depends(checar_csrf)])
     def caju_conferir(request: Request, codigo: str = Form(...), valor: str = Form(...),
-                      conn=Depends(get_conn)):
+                      descricao: str = Form("Recarga benefícios Caju"), conn=Depends(get_conn)):
         try:
-            pid = pg.criar_pix_copia_e_cola(conn, codigo, pg.parse_valor(valor),
-                                            "Recarga benefícios Caju")
+            pid = pg.criar_pix_copia_e_cola(conn, codigo, pg.parse_valor(valor), descricao.strip() or None)
         except pg.PagamentoInvalido as e:
-            return render(request, "caju.html", erro=str(e), codigo=codigo, valor=valor)
+            return render(request, "caju.html", erro=str(e), codigo=codigo, valor=valor, descricao=descricao)
         return RedirectResponse(f"/pagamento/{pid}", status_code=303)
 
     # --- conferência e envio de um pagamento ---------------------------
@@ -345,9 +345,13 @@ def create_app(settings: Settings,
     def lista_boletos(conn):
         return conn.execute("SELECT * FROM boletos ORDER BY id DESC LIMIT 20").fetchall()
 
+    def extra_boletos(conn):
+        n = conn.execute("SELECT count(*) FROM boletos WHERE status = 'rascunho'").fetchone()[0]
+        return {"para_conferir": n, "pasta_entrada": str(settings.entrada_dir)}
+
     @app.get("/boletos", response_class=HTMLResponse)
     def boletos(request: Request, conn=Depends(get_conn)):
-        return render(request, "boletos.html", itens=lista_boletos(conn), erro=None)
+        return render(request, "boletos.html", itens=lista_boletos(conn), erro=None, **extra_boletos(conn))
 
     @app.post("/boletos/conferir", dependencies=[Depends(checar_csrf)])
     def boleto_conferir(request: Request, arquivo: UploadFile | None = File(None),
@@ -363,7 +367,8 @@ def create_app(settings: Settings,
                 raise bl.BoletoInvalido("envie o PDF ou cole a linha digitável")
             bid = bs.criar(conn, b, nome, venc)
         except (bl.BoletoInvalido, bs.BoletoRecusado, ValueError) as e:
-            return render(request, "boletos.html", itens=lista_boletos(conn), erro=str(e))
+            return render(request, "boletos.html", itens=lista_boletos(conn), erro=str(e),
+                          **extra_boletos(conn))
         return RedirectResponse(f"/boleto/{bid}", status_code=303)
 
     def buscar_boleto(conn, bid: int):

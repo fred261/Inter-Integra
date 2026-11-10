@@ -31,6 +31,18 @@ class Settings:
         return self.home / "inter.key"
 
     @property
+    def entrada_dir(self) -> Path:
+        return self.home / "boletos" / "entrada"
+
+    @property
+    def processados_dir(self) -> Path:
+        return self.home / "boletos" / "processados"
+
+    @property
+    def erros_dir(self) -> Path:
+        return self.home / "boletos" / "erros"
+
+    @property
     def base_url(self) -> str:
         return URLS[self.ambiente]
 
@@ -51,6 +63,13 @@ def load_settings() -> Settings:
 def ensure_home(settings: Settings) -> None:
     settings.home.mkdir(parents=True, exist_ok=True)
     settings.home.chmod(0o700)
+
+
+def ensure_entrada(settings: Settings) -> None:
+    for d in (settings.entrada_dir, settings.processados_dir, settings.erros_dir):
+        d.mkdir(parents=True, exist_ok=True)
+        d.chmod(0o700)
+    settings.entrada_dir.parent.chmod(0o700)
 
 
 def check_cert_permissions(settings: Settings) -> list[str]:

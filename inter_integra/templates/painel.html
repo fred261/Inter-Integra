@@ -15,6 +15,7 @@
     {% else %}<strong class="valor mudo">—</strong><small class="aviso-txt">{{ erro_saldo }}</small>{% endif %}
   </div>
   <div class="cartao"><span class="rotulo">Aguardando aprovação / processando</span><strong class="valor">{{ pendentes | length }}</strong></div>
+  {% if para_conferir %}<a class="cartao" href="/boletos" style="text-decoration:none;color:inherit"><span class="rotulo">Boletos para conferir</span><strong class="valor">{{ para_conferir }}</strong></a>{% endif %}
 </section>
 
 <section class="painel">

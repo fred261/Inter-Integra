@@ -122,6 +122,14 @@ def test_teto_aparece_na_tela(ctx):
     assert "teto" in post(c, "/pix/conferir", beneficiario_id="1", valor="99.999,00").text
 
 
+def test_copia_e_cola_com_descricao_editavel(ctx):
+    c, s, chamadas = ctx
+    r = post(c, "/caju/conferir", codigo="00020126580014br.gov.bcb.pix0136abcdef1234567890",
+             valor="50,00", descricao="Fornecedor ACME")
+    assert r.status_code == 303 and "Fornecedor ACME" in c.get(r.headers["location"]).text
+    assert "Copia e Cola" in c.get("/").text
+
+
 def test_caju(ctx):
     c, s, chamadas = ctx
     assert "incompleto" in post(c, "/caju/conferir", codigo="curto", valor="10").text

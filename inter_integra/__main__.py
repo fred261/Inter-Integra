@@ -10,14 +10,15 @@ from pathlib import Path
 
 import httpx
 
-from . import boleto as boleto_mod, boletos, credentials, db, pagamentos
+from . import atalho, boleto as boleto_mod, boletos, credentials, db, entrada, pagamentos
 from .client import InterClient, InterError, parse_data
-from .config import check_cert_permissions, ensure_home, load_settings
+from .config import check_cert_permissions, ensure_entrada, ensure_home, load_settings
 
 
 def cmd_init(s) -> int:
     ensure_home(s)
     db.init_db(s.db_path).close()
+    ensure_entrada(s)
     print(f"Pasta e banco prontos em {s.home} (ambiente: {s.ambiente})")
     print(f"Coloque o certificado em {s.cert_path} e a chave em {s.key_path} (chmod 600).")
     return 0
@@ -113,13 +114,14 @@ def cmd_pix_chave(s, args) -> int:
 
 
 def cmd_pix_caju(s, args) -> int:
-    if len(args) != 1:
-        print("Uso: pix-caju VALOR   (o código Copia e Cola é pedido em seguida)")
+    if not 1 <= len(args) <= 2:
+        print("Uso: pix-caju VALOR [DESCRICAO]   (o código Copia e Cola é pedido em seguida)")
         return 2
     conn = _abrir(s)
     valor = pagamentos.parse_valor(args[0])
     codigo = input("Cole o código Copia e Cola: ")
-    pid = pagamentos.criar_pix_copia_e_cola(conn, codigo, valor, "Recarga benefícios Caju")
+    pid = pagamentos.criar_pix_copia_e_cola(conn, codigo, valor,
+                                            args[1] if len(args) > 1 else "Recarga benefícios Caju")
     return _enviar(s, conn, pid, f"Pix Copia e Cola (Caju) de R$ {valor / 100:.2f}")
 
 
@@ -179,6 +181,39 @@ def cmd_boleto_codigo(s, args) -> int:
     return _fluxo_boleto(s, _abrir(s), b, None, parse_data(args[0]) if args else None)
 
 
+def cmd_entrada(s, args) -> int:
+    conn = _abrir(s)
+    res = entrada.processar_pasta(s, conn)
+    for r in res:
+        print(f"{'OK ' if r.ok else 'ERRO'} {r.arquivo}: " + (f"boleto #{r.detalhe} criado (rascunho)" if r.ok else r.detalhe))
+    entrada.notificar(sum(r.ok for r in res), sum(not r.ok for r in res))
+    return 0
+
+
+def cmd_agente(s, args) -> int:
+    """Gera o LaunchAgent da pasta de entrada e mostra os comandos para ligá-lo."""
+    ensure_entrada(s)
+    destino = Path.home() / "Library" / "LaunchAgents" / "br.inter-integra.entrada.plist"
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    destino.write_bytes(entrada.plist_agente(sys.executable, str(s.home), s.ambiente, str(s.entrada_dir)))
+    print(f"Agente gravado em {destino}\nPara LIGAR:\n  launchctl bootstrap gui/$(id -u) {destino}"
+          f"\nPara DESLIGAR:\n  launchctl bootout gui/$(id -u) {destino}")
+    return 0
+
+
+def cmd_atalho(s, args) -> int:
+    """Cria 'Inter Integra.command' na Área de Trabalho."""
+    destino = Path.home() / "Desktop" / atalho.NOME
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    projeto = str(Path(__file__).resolve().parent.parent)
+    destino.write_text(atalho.gerar_script(projeto, str(s.home), s.ambiente, sys.executable), encoding="utf-8")
+    destino.chmod(0o755)
+    print(f"Atalho criado: {destino}\nAmbiente fixado no atalho: {s.ambiente}")
+    if s.ambiente != "producao":
+        print("ATENÇÃO: o ambiente não é 'producao'. Para o dinheiro real, rode antes: export INTER_AMBIENTE=producao")
+    return 0
+
+
 def cmd_boletos_inter(s, args) -> int:
     hoje = date.today()
     for i in _cliente(s).buscar_boletos(dataInicio=(hoje - timedelta(days=30)).isoformat(),
@@ -205,8 +240,9 @@ COMANDOS = {"init": cmd_init, "credenciais": cmd_credenciais, "status": cmd_stat
             "saldo": cmd_saldo, "extrato": cmd_extrato,
             "beneficiario-add": cmd_beneficiario_add, "pix-chave": cmd_pix_chave,
             "pix-caju": cmd_pix_caju, "atualizar": cmd_atualizar, "web": cmd_web,
+            "entrada": cmd_entrada, "agente-entrada": cmd_agente, "atalho": cmd_atalho,
             "boleto": cmd_boleto, "boleto-codigo": cmd_boleto_codigo, "boletos-inter": cmd_boletos_inter}
-_COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status", "web"}
+_COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status", "web", "entrada", "agente-entrada", "atalho"}
 
 
 def main(argv: list[str]) -> int:

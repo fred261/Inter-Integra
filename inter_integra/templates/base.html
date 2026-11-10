@@ -11,7 +11,7 @@
   <aside class="lateral">
     <div class="marca"><span class="logo">II</span><div><strong>Inter Integra</strong><small>Pagamentos locais</small></div></div>
     <nav>
-      {% set menu = [("painel","/","Painel"),("beneficiarios","/beneficiarios","Beneficiários"),("folha","/folha","Folha"),("caju","/caju","Caju"),("boletos","/boletos","Boletos"),("historico","/historico","Histórico")] %}
+      {% set menu = [("painel","/","Painel"),("beneficiarios","/beneficiarios","Beneficiários"),("folha","/folha","Folha"),("caju","/caju","Copia e Cola"),("boletos","/boletos","Boletos"),("historico","/historico","Histórico")] %}
       {% for chave, url, nome in menu %}
         <a href="{{ url }}" class="{{ 'ativo' if pagina.startswith(chave) or (chave == 'boletos' and pagina == 'boleto') else '' }}">{{ nome }}</a>
       {% endfor %}
