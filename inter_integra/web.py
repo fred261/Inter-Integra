@@ -22,6 +22,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from . import boleto as bl, boletos as bs, credentials, db, pagamentos as pg
 from .client import InterClient, InterError
 from .config import Settings
+from .versao import codigo_versao
 
 BASE = Path(__file__).parent
 HOSTS_PERMITIDOS = ["localhost", "127.0.0.1"]
@@ -67,6 +68,11 @@ def create_app(settings: Settings,
     templates.env.globals["csrf"] = csrf_token
     templates.env.globals["ambiente"] = settings.ambiente
     saldo_cache: dict = {"t": 0.0, "v": None}
+    versao_carregada = codigo_versao()  # do código que este processo carregou (para o atalho decidir reiniciar)
+
+    @app.get("/versao")
+    def versao():
+        return {"app": "inter-integra", "versao": versao_carregada}
 
     def novo_cliente() -> InterClient:
         if client_factory:

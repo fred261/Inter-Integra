@@ -10,7 +10,7 @@ def test_script_valido_e_com_aspas_seguras(tmp_path):
     f.write_text(texto)
     assert subprocess.run(["bash", "-n", str(f)]).returncode == 0  # sintaxe ok
     assert "export INTER_AMBIENTE=producao" in texto
-    assert "exec '/Users/m 2/p/.venv/bin/python' -m inter_integra web" in texto
+    assert "'/Users/m 2/p/.venv/bin/python' -m inter_integra abrir" in texto
     assert texto.startswith("#!/bin/bash")
 
 

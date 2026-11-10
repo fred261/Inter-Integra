@@ -10,7 +10,7 @@ from pathlib import Path
 
 import httpx
 
-from . import atalho, boleto as boleto_mod, boletos, credentials, db, entrada, pagamentos
+from . import abrir, atalho, boleto as boleto_mod, boletos, credentials, db, entrada, pagamentos
 from .client import InterClient, InterError, parse_data
 from .config import check_cert_permissions, ensure_entrada, ensure_home, load_settings
 
@@ -225,16 +225,37 @@ def cmd_boletos_inter(s, args) -> int:
     return 0
 
 
-def cmd_web(s) -> int:
+def _subir_web(s):
     import uvicorn
 
     from .web import create_app
+    db.init_db(s.db_path).close()  # cria tabelas novas (ex.: boletos) em bancos antigos
+
+    def subir(p: int) -> None:
+        print(f"Interface em http://localhost:{p} (somente neste computador). Ctrl+C para sair.")
+        uvicorn.run(create_app(s), host="127.0.0.1", port=p, log_level="warning")
+    return subir
+
+
+def cmd_web(s) -> int:
     if not s.db_path.exists():
         print("banco ausente: rode `init`")
         return 1
-    db.init_db(s.db_path).close()  # cria tabelas novas (ex.: boletos) em bancos antigos
-    print("Interface em http://localhost:8000 (somente neste computador). Ctrl+C para sair.")
-    uvicorn.run(create_app(s), host="127.0.0.1", port=8000, log_level="warning")
+    _subir_web(s)(abrir.porta())
+    return 0
+
+
+def cmd_abrir(s) -> int:
+    """Usado pelo atalho: inicia, só abre o navegador ou reinicia se o código mudou."""
+    if not s.db_path.exists():
+        print("banco ausente: rode `init`")
+        return 1
+    return abrir.executar(_subir_web(s))
+
+
+def cmd_versao(s) -> int:
+    from .versao import codigo_versao
+    print(codigo_versao())
     return 0
 
 
@@ -242,9 +263,9 @@ COMANDOS = {"init": cmd_init, "credenciais": cmd_credenciais, "status": cmd_stat
             "saldo": cmd_saldo, "extrato": cmd_extrato,
             "beneficiario-add": cmd_beneficiario_add, "pix-chave": cmd_pix_chave,
             "pix-caju": cmd_pix_caju, "atualizar": cmd_atualizar, "web": cmd_web,
-            "entrada": cmd_entrada, "agente-entrada": cmd_agente, "atalho": cmd_atalho,
+            "abrir": cmd_abrir, "versao": cmd_versao, "entrada": cmd_entrada, "agente-entrada": cmd_agente, "atalho": cmd_atalho,
             "boleto": cmd_boleto, "boleto-codigo": cmd_boleto_codigo, "boletos-inter": cmd_boletos_inter}
-_COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status", "web", "entrada", "agente-entrada", "atalho"}
+_COM_ARGS = set(COMANDOS) - {"init", "credenciais", "status", "web", "entrada", "agente-entrada", "atalho", "abrir", "versao"}
 
 
 def main(argv: list[str]) -> int:
