@@ -11,7 +11,7 @@ import uuid
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from . import db
+from . import db, pixcode
 from .client import InterClient, InterError
 
 MAX_DESCRICAO = 140
@@ -116,16 +116,29 @@ def criar_pix_chave(conn, beneficiario_id: int, valor_centavos: int,
                                   descricao, folha_id)
 
 
-def criar_pix_copia_e_cola(conn, codigo: str, valor_centavos: int,
+def criar_pix_copia_e_cola(conn, codigo: str, valor_centavos: int | None = None,
                            descricao: str | None = None) -> int:
-    codigo = "".join(codigo.split())
-    if len(codigo) < 20:
-        raise PagamentoInvalido("código Copia e Cola parece incompleto")
+    """Lê o valor e o recebedor do próprio código. Se o usuário informar um valor diferente
+    do que está no código, recusa (evita pagar valor errado)."""
+    try:
+        pix = pixcode.parse(codigo)
+    except pixcode.PixCodeInvalido as e:
+        raise PagamentoInvalido(str(e)) from None
+    if pix.valor_centavos is not None:
+        if valor_centavos not in (None, pix.valor_centavos):
+            raise PagamentoInvalido(
+                f"valor informado (R$ {valor_centavos / 100:.2f}) difere do valor do código "
+                f"(R$ {pix.valor_centavos / 100:.2f})")
+        valor_centavos = pix.valor_centavos
+    elif valor_centavos is None:
+        raise PagamentoInvalido("este código não traz o valor (Pix dinâmico): informe o valor")
     _validar(conn, valor_centavos, descricao, None)
+    recebedor = " · ".join(x for x in (pix.recebedor, pix.cidade) if x) or None
     with conn:
         cur = conn.execute(
-            "INSERT INTO pagamentos (pix_copia_e_cola, valor_centavos, descricao, id_idempotente) "
-            "VALUES (?, ?, ?, ?)", (codigo, valor_centavos, descricao, str(uuid.uuid4())))
+            "INSERT INTO pagamentos (pix_copia_e_cola, recebedor_texto, valor_centavos, descricao, "
+            "id_idempotente) VALUES (?, ?, ?, ?, ?)",
+            (pix.codigo, recebedor, valor_centavos, descricao, str(uuid.uuid4())))
     return cur.lastrowid
 
 

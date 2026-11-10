@@ -99,4 +99,4 @@ python -m inter_integra atalho             # cria ~/Desktop/"Inter Integra.comma
 ```
 Duplo clique: inicia a interface no ambiente gravado no atalho e abre o navegador (se já estiver rodando, só abre a página).
 
-A tela **Copia e Cola** (antes "Caju") serve para qualquer código Pix Copia e Cola, com descrição editável.
+A tela **Copia e Cola** (antes "Caju") serve para qualquer código Pix Copia e Cola, com descrição editável. O sistema **lê o valor e o recebedor do próprio código** (padrão EMV/BR Code), confere o CRC para pegar colagens cortadas e recusa se o valor digitado divergir do código. Pix dinâmico (com URL) normalmente não traz o valor: nesse caso ele precisa ser informado. Nome e cidade do recebedor mostrados vêm do código e não são verificados; confirme o destinatário real no app do Inter.

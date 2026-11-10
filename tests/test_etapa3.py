@@ -5,7 +5,9 @@ from inter_integra import db, pagamentos as pg
 from inter_integra.client import InterClient
 from inter_integra.config import Settings, ensure_home
 
-CODIGO = "00020126580014br.gov.bcb.pix0136abcdef1234567890"
+from inter_integra import pixcode
+
+CODIGO = pixcode.monta("fornecedor@exemplo.com", "200.00", nome="CAJU BENEFICIOS")
 
 
 @pytest.fixture
@@ -89,12 +91,38 @@ def test_envio_exige_confirmacao_e_monta_payload(env):
 
 def test_copia_e_cola(env):
     s, conn = env
-    pid = pg.criar_pix_copia_e_cola(conn, CODIGO[:20] + "\n " + CODIGO[20:], 20000, "Caju")
+    pid = pg.criar_pix_copia_e_cola(conn, CODIGO[:20] + "\n" + CODIGO[20:], None, "Caju")  # valor vem do código
+    assert conn.execute("SELECT valor_centavos, recebedor_texto FROM pagamentos").fetchone()[:] == (
+        20000, "CAJU BENEFICIOS · SAO PAULO")
     f = Fake(s)
     pg.enviar(conn, f.client, pid, confirmado=True)
     assert f.pix[0][1]["destinatario"] == {"tipo": "PIX_COPIA_E_COLA", "pixCopiaECola": CODIGO}
-    with pytest.raises(pg.PagamentoInvalido):
+    assert f.pix[0][1]["valor"] == 200.0
+    with pytest.raises(pg.PagamentoInvalido, match="não parece"):
         pg.criar_pix_copia_e_cola(conn, "curto", 100)
+    with pytest.raises(pg.PagamentoInvalido, match="difere"):
+        pg.criar_pix_copia_e_cola(conn, CODIGO, 10000)  # valor digitado diferente do código
+    with pytest.raises(pg.PagamentoInvalido, match="CRC"):
+        pg.criar_pix_copia_e_cola(conn, CODIGO[:-1] + ("0" if CODIGO[-1] != "0" else "1"))
+    with pytest.raises(pg.PagamentoInvalido, match="CRC"):
+        pg.criar_pix_copia_e_cola(conn, CODIGO[:-10])  # colagem cortada
+    pid2 = pg.criar_pix_copia_e_cola(conn, CODIGO, 20000)  # mesmo valor: aceito
+    assert pid2 != pid
+
+
+def test_pix_dinamico_exige_valor(env):
+    s, conn = env
+    din = pixcode.monta(url="pix.exemplo.com/qr/v2/abc123", nome="LOJA")
+    with pytest.raises(pg.PagamentoInvalido, match="informe o valor"):
+        pg.criar_pix_copia_e_cola(conn, din)
+    assert pg.criar_pix_copia_e_cola(conn, din, 1500) > 0
+
+
+def test_nome_com_espacos_nao_e_corrompido(env):
+    s, conn = env
+    cod = pixcode.monta("a@x.com", "10.00", nome="MARIA DA SILVA")
+    pid = pg.criar_pix_copia_e_cola(conn, cod)
+    assert conn.execute("SELECT pix_copia_e_cola FROM pagamentos WHERE id=?", (pid,)).fetchone()[0] == cod
 
 
 def test_erro_http_permite_reenvio_com_mesmo_id(env):

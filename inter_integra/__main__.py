@@ -114,15 +114,17 @@ def cmd_pix_chave(s, args) -> int:
 
 
 def cmd_pix_caju(s, args) -> int:
-    if not 1 <= len(args) <= 2:
-        print("Uso: pix-caju VALOR [DESCRICAO]   (o código Copia e Cola é pedido em seguida)")
+    if len(args) > 2:
+        print("Uso: pix-caju [VALOR|-] [DESCRICAO]   (o código é pedido em seguida; sem VALOR, usa o do código)")
         return 2
     conn = _abrir(s)
-    valor = pagamentos.parse_valor(args[0])
+    valor = pagamentos.parse_valor(args[0]) if args and args[0] != "-" else None
     codigo = input("Cole o código Copia e Cola: ")
     pid = pagamentos.criar_pix_copia_e_cola(conn, codigo, valor,
                                             args[1] if len(args) > 1 else "Recarga benefícios Caju")
-    return _enviar(s, conn, pid, f"Pix Copia e Cola (Caju) de R$ {valor / 100:.2f}")
+    p = conn.execute("SELECT valor_centavos, recebedor_texto FROM pagamentos WHERE id = ?", (pid,)).fetchone()
+    return _enviar(s, conn, pid, f"Pix Copia e Cola de R$ {p['valor_centavos'] / 100:.2f}"
+                                 f" para {p['recebedor_texto'] or '(recebedor não informado no código)'}")
 
 
 def _enviar(s, conn, pid: int, resumo: str) -> int:

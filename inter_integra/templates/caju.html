@@ -7,9 +7,9 @@
   <form method="post" action="/caju/conferir" class="coluna-form">
     <input type="hidden" name="csrf_token" value="{{ csrf }}">
     <label>Código Pix Copia e Cola<textarea name="codigo" rows="5" required spellcheck="false">{{ codigo }}</textarea></label>
-    <label>Valor<input name="valor" value="{{ valor }}" placeholder="0,00" inputmode="decimal" required></label>
+    <label>Valor <small>(deixe em branco: o valor vem do código)</small><input name="valor" value="{{ valor }}" placeholder="lido do código" inputmode="decimal"></label>
     <label>Descrição <small>(até 140 caracteres)</small><input name="descricao" value="{{ descricao or 'Recarga benefícios Caju' }}" maxlength="140"></label>
-    <p class="dica">O valor deve ser o mesmo da cobrança. Se divergir do que está dentro do código, o Inter pode recusar.</p>
+    <p class="dica">O sistema lê o valor e o recebedor do próprio código e confere se ele não foi cortado ao colar. Só preencha o valor se o código não trouxer um (Pix dinâmico).</p>
     <button class="btn">Conferir</button>
   </form>
 </section>

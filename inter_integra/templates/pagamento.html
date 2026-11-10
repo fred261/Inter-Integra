@@ -9,7 +9,7 @@
 
 <section class="painel estreito">
   <dl class="dados">
-    <dt>Destino</dt><dd>{% if p.pix_copia_e_cola %}Pix Copia e Cola<br><code class="quebra">{{ p.pix_copia_e_cola[:60] }}…{{ p.pix_copia_e_cola[-10:] }}</code>
+    <dt>Destino</dt><dd>{% if p.pix_copia_e_cola %}Pix Copia e Cola{% if p.recebedor_texto %}<br><strong>{{ p.recebedor_texto }}</strong> <small class="mudo">(lido do código, não verificado)</small>{% endif %}<br><code class="quebra">{{ p.pix_copia_e_cola[:60] }}…{{ p.pix_copia_e_cola[-10:] }}</code>
       {% else %}<strong>{{ p.nome }}</strong><br><code>{{ p.chave_pix }}</code>{% endif %}</dd>
     <dt>Valor</dt><dd class="valor-grande">{{ p.valor_centavos | brl }}</dd>
     <dt>Data do pagamento</dt><dd>{{ p.data_pagamento or "hoje" }}</dd>

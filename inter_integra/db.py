@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS pagamentos (
     id INTEGER PRIMARY KEY,
     beneficiario_id INTEGER REFERENCES beneficiarios(id),
     pix_copia_e_cola TEXT,
+    recebedor_texto TEXT,  -- nome/cidade lidos do código (informativo, não verificado)
     valor_centavos INTEGER NOT NULL CHECK (valor_centavos > 0),
     data_pagamento TEXT,
     descricao TEXT,
@@ -97,6 +98,9 @@ def connect(db_path: Path, timeout: float = 5.0) -> sqlite3.Connection:
 def init_db(db_path: Path) -> sqlite3.Connection:
     conn = connect(db_path)
     conn.executescript(SCHEMA)
+    colunas = {r["name"] for r in conn.execute("PRAGMA table_info(pagamentos)")}
+    if "recebedor_texto" not in colunas:  # bancos criados antes da leitura do Copia e Cola
+        conn.execute("ALTER TABLE pagamentos ADD COLUMN recebedor_texto TEXT")
     conn.execute(
         "INSERT OR IGNORE INTO config (chave, valor) VALUES ('teto_centavos', ?)",
         (str(DEFAULT_TETO_CENTAVOS),),

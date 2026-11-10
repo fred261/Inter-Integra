@@ -188,10 +188,11 @@ def create_app(settings: Settings,
         return render(request, "caju.html", erro=None, codigo="", valor="", descricao="")
 
     @app.post("/caju/conferir", dependencies=[Depends(checar_csrf)])
-    def caju_conferir(request: Request, codigo: str = Form(...), valor: str = Form(...),
+    def caju_conferir(request: Request, codigo: str = Form(...), valor: str = Form(""),
                       descricao: str = Form("Recarga benefícios Caju"), conn=Depends(get_conn)):
         try:
-            pid = pg.criar_pix_copia_e_cola(conn, codigo, pg.parse_valor(valor), descricao.strip() or None)
+            pid = pg.criar_pix_copia_e_cola(conn, codigo, pg.parse_valor(valor) if valor.strip() else None,
+                                            descricao.strip() or None)
         except pg.PagamentoInvalido as e:
             return render(request, "caju.html", erro=str(e), codigo=codigo, valor=valor, descricao=descricao)
         return RedirectResponse(f"/pagamento/{pid}", status_code=303)

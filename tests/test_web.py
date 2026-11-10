@@ -124,17 +124,21 @@ def test_teto_aparece_na_tela(ctx):
 
 def test_copia_e_cola_com_descricao_editavel(ctx):
     c, s, chamadas = ctx
-    r = post(c, "/caju/conferir", codigo="00020126580014br.gov.bcb.pix0136abcdef1234567890",
-             valor="50,00", descricao="Fornecedor ACME")
-    assert r.status_code == 303 and "Fornecedor ACME" in c.get(r.headers["location"]).text
+    from inter_integra import pixcode
+    cod = pixcode.monta("acme@exemplo.com", "50.00", nome="ACME LTDA")
+    r = post(c, "/caju/conferir", codigo=cod, valor="", descricao="Fornecedor ACME")  # valor lido do código
+    assert r.status_code == 303
+    pagina = c.get(r.headers["location"]).text
+    assert "Fornecedor ACME" in pagina and "R$ 50,00" in pagina and "ACME LTDA" in pagina
+    assert "difere" in post(c, "/caju/conferir", codigo=cod, valor="60,00").text
     assert "Copia e Cola" in c.get("/").text
 
 
 def test_caju(ctx):
     c, s, chamadas = ctx
-    assert "incompleto" in post(c, "/caju/conferir", codigo="curto", valor="10").text
-    r = post(c, "/caju/conferir", codigo="00020126580014br.gov.bcb.pix0136abcdef1234567890",
-             valor="2.000,00")
+    from inter_integra import pixcode
+    assert "não parece" in post(c, "/caju/conferir", codigo="curto", valor="10").text
+    r = post(c, "/caju/conferir", codigo=pixcode.monta("caju@exemplo.com", "2000.00", nome="CAJU"))
     assert r.status_code == 303
     assert "Copia e Cola" in c.get(r.headers["location"]).text
     post(c, r.headers["location"] + "/enviar", confirmacao="ENVIAR")
