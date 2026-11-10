@@ -78,7 +78,9 @@ def create_app(settings: Settings,
         resp = await call_next(request)
         resp.headers["X-Frame-Options"] = "DENY"
         resp.headers["X-Content-Type-Options"] = "nosniff"
-        resp.headers["Referrer-Policy"] = "no-referrer"
+        # same-origin (e não no-referrer): com no-referrer o navegador manda "Origin: null" nos POSTs
+        # e a checagem de origem recusaria os formulários legítimos.
+        resp.headers["Referrer-Policy"] = "same-origin"
         resp.headers["Cache-Control"] = "no-store"
         resp.headers["Content-Security-Policy"] = (
             "default-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")
@@ -186,6 +188,17 @@ def create_app(settings: Settings,
     @app.get("/caju", response_class=HTMLResponse)
     def caju(request: Request):
         return render(request, "caju.html", erro=None, codigo="", valor="", descricao="")
+
+    @app.post("/caju/ler", dependencies=[Depends(checar_csrf)])
+    def caju_ler(codigo: str = Form("")):
+        """Prévia ao colar: valor e recebedor lidos do código (mesma regra do envio)."""
+        from . import pixcode
+        try:
+            p = pixcode.parse(codigo)
+        except pixcode.PixCodeInvalido as e:
+            return {"ok": False, "erro": str(e)}
+        return {"ok": True, "valor": None if p.valor_centavos is None else f"{p.valor_centavos / 100:.2f}".replace(".", ","),
+                "recebedor": " · ".join(x for x in (p.recebedor, p.cidade) if x) or None, "dinamico": p.dinamico}
 
     @app.post("/caju/conferir", dependencies=[Depends(checar_csrf)])
     def caju_conferir(request: Request, codigo: str = Form(...), valor: str = Form(""),

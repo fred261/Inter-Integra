@@ -186,3 +186,28 @@ def test_historico_e_csv_sem_injecao(ctx):
     assert c.get("/historico?de=xx").status_code == 200
     assert "inválida" in c.get("/historico?de=xx").text
     assert c.get("/historico.csv?de=xx").status_code == 400
+
+
+def test_referrer_policy_permite_origin_nos_posts(ctx):
+    """Regressão: com 'no-referrer' o navegador manda Origin: null e o CSRF recusava os formulários."""
+    c, *_ = ctx
+    assert c.get("/caju").headers["referrer-policy"] == "same-origin"
+    # origem nula (ex.: página sandboxed de outro site) continua recusada
+    assert post_origin(c, "null") == 403
+    assert post_origin(c, "http://localhost:8000") != 403
+    assert post_origin(c, "http://127.0.0.1:8000") != 403
+
+
+def post_origin(c, origem):
+    return c.post("/caju/ler", data={"csrf_token": token(c), "codigo": "x"}, headers={"origin": origem}).status_code
+
+
+def test_previa_ao_colar_le_valor_e_recebedor(ctx):
+    from inter_integra import pixcode
+    c, *_ = ctx
+    ok = c.post("/caju/ler", data={"csrf_token": token(c), "codigo": pixcode.monta("a@x.com", "150.00", nome="LOJA X")}).json()
+    assert ok == {"ok": True, "valor": "150,00", "recebedor": "LOJA X · SAO PAULO", "dinamico": False}
+    din = c.post("/caju/ler", data={"csrf_token": token(c), "codigo": pixcode.monta(url="pix.ex.com/qr/v2/abc")}).json()
+    assert din["ok"] and din["valor"] is None and din["dinamico"]
+    assert c.post("/caju/ler", data={"csrf_token": token(c), "codigo": "lixo"}).json()["ok"] is False
+    assert c.post("/caju/ler", data={"csrf_token": "x", "codigo": "lixo"}).status_code == 403
