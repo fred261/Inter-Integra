@@ -24,3 +24,19 @@ def test_cmd_atalho_cria_arquivo_executavel(tmp_path, monkeypatch):
     arq = tmp_path / "Desktop" / atalho.NOME
     assert arq.exists() and os.access(arq, os.X_OK)
     assert "INTER_AMBIENTE=producao" in arq.read_text()
+
+
+def test_todos_os_comandos_passam_pelo_despachador(tmp_path, monkeypatch):
+    """Garante que cada comando é chamável do jeito que main() chama (regressão: TypeError em 'atalho')."""
+    from pathlib import Path
+    from inter_integra import __main__ as cli, db
+    from inter_integra.config import Settings, ensure_home
+    s = Settings(home=tmp_path / "p", ambiente="producao")
+    ensure_home(s)
+    db.init_db(s.db_path).close()
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(cli, "load_settings", lambda: s)
+    for cmd in ("atalho", "entrada", "agente-entrada", "init"):
+        assert cli.main(["x", cmd]) == 0, cmd
+    assert (tmp_path / "Desktop" / "Inter Integra.command").exists()
+    assert (tmp_path / "Library" / "LaunchAgents" / "br.inter-integra.entrada.plist").exists()

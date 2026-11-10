@@ -183,7 +183,7 @@ def cmd_boleto_codigo(s, args) -> int:
     return _fluxo_boleto(s, _abrir(s), b, None, parse_data(args[0]) if args else None)
 
 
-def cmd_entrada(s, args) -> int:
+def cmd_entrada(s, args=()) -> int:
     conn = _abrir(s)
     res = entrada.processar_pasta(s, conn)
     for r in res:
@@ -192,7 +192,7 @@ def cmd_entrada(s, args) -> int:
     return 0
 
 
-def cmd_agente(s, args) -> int:
+def cmd_agente(s, args=()) -> int:
     """Gera o LaunchAgent da pasta de entrada e mostra os comandos para ligá-lo."""
     ensure_entrada(s)
     destino = Path.home() / "Library" / "LaunchAgents" / "br.inter-integra.entrada.plist"
@@ -203,7 +203,7 @@ def cmd_agente(s, args) -> int:
     return 0
 
 
-def cmd_atalho(s, args) -> int:
+def cmd_atalho(s, args=()) -> int:
     """Cria 'Inter Integra.command' na Área de Trabalho."""
     destino = Path.home() / "Desktop" / atalho.NOME
     destino.parent.mkdir(parents=True, exist_ok=True)
